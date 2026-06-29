@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Awards Metadata</title>
+</head>
+<body>
+    <div id="AwardsMetadataConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-checkbox,emby-select">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="AwardsMetadataConfigForm">
+                    <div class="sectionTitleContainer">
+                        <h2 class="sectionTitle">Awards Metadata Settings</h2>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Scraper Settings</h3>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel" for="txtRateLimitDelay">Rate Limit Delay (ms)</label>
+                            <input id="txtRateLimitDelay" type="number" is="emby-input" min="100" step="100" />
+                            <div class="fieldDescription">Minimum delay between HTTP requests to TMDB.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel" for="txtMaxRetry">Max Retry Count</label>
+                            <input id="txtMaxRetry" type="number" is="emby-input" min="0" max="10" />
+                            <div class="fieldDescription">Maximum number of retry attempts for failed requests.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel" for="txtTimeout">Request Timeout (seconds)</label>
+                            <input id="txtTimeout" type="number" is="emby-input" min="5" max="120" />
+                            <div class="fieldDescription">HTTP request timeout in seconds.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Tag Settings</h3>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input id="chkEnableWinner" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Winner Tagging</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input id="chkEnableNominee" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Nominee Tagging</span>
+                            </label>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel" for="txtTagFormat">Tag Format</label>
+                            <input id="txtTagFormat" type="text" is="emby-input" />
+                            <div class="fieldDescription">
+                                Available placeholders: {awardType}, {awardResult}, {awardCategory}, {awardYear}
+                                <br />
+                                Default: award-{awardType}-{awardResult}-{awardCategory}-{awardYear}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Award Organizations</h3>
+                        <p class="fieldDescription">
+                            Click "Discover Organizations" to query TMDB for available award organizations,
+                            then select which ones to scrape.
+                        </p>
+
+                        <button id="btnDiscover" is="emby-button" type="button" class="raised button-submit">
+                            <span>Discover Organizations</span>
+                        </button>
+
+                        <div id="organizationsList" class="paperList" style="margin-top: 1em;">
+                        </div>
+                    </div>
+
+                    <div class="verticalSection" id="advancedSection" style="display:none;">
+                        <h3 class="sectionTitle">Advanced</h3>
+                        <div class="inputContainer">
+                            <label class="inputLabel" for="txtBaseUrl">TMDB Base URL</label>
+                            <input id="txtBaseUrl" type="text" is="emby-input" />
+                            <div class="fieldDescription">Override the TMDB base URL (for testing only).</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <div class="checkboxContainer">
+                            <label>
+                                <input id="chkAdvancedMode" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Advanced Mode</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        var AwardsMetadataConfig = {
+            pluginUniqueId: '38895a18-37d8-4a0a-92f8-c38335820627'
+        };
+
+        document.querySelector('#AwardsMetadataConfigPage')
+            .addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
+                    document.querySelector('#txtRateLimitDelay').value = config.RateLimitDelayMs;
+                    document.querySelector('#txtMaxRetry').value = config.MaxRetryCount;
+                    document.querySelector('#txtTimeout').value = config.RequestTimeoutSeconds;
+                    document.querySelector('#chkEnableWinner').checked = config.EnableWinnerTagging;
+                    document.querySelector('#chkEnableNominee').checked = config.EnableNomineeTagging;
+                    document.querySelector('#txtTagFormat').value = config.TagFormat;
+                    document.querySelector('#chkAdvancedMode').checked = config.EnableAdvancedMode;
+                    document.querySelector('#txtBaseUrl').value = config.TmdbBaseUrl;
+
+                    if (config.EnableAdvancedMode) {
+                        document.querySelector('#advancedSection').style.display = '';
+                    }
+
+                    renderOrganizations(config);
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+
+        document.querySelector('#chkAdvancedMode')
+            .addEventListener('change', function () {
+                document.querySelector('#advancedSection').style.display =
+                    this.checked ? '' : 'none';
+            });
+
+        document.querySelector('#AwardsMetadataConfigForm')
+            .addEventListener('submit', function (e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
+                    config.RateLimitDelayMs = parseInt(document.querySelector('#txtRateLimitDelay').value);
+                    config.MaxRetryCount = parseInt(document.querySelector('#txtMaxRetry').value);
+                    config.RequestTimeoutSeconds = parseInt(document.querySelector('#txtTimeout').value);
+                    config.EnableWinnerTagging = document.querySelector('#chkEnableWinner').checked;
+                    config.EnableNomineeTagging = document.querySelector('#chkEnableNominee').checked;
+                    config.TagFormat = document.querySelector('#txtTagFormat').value;
+                    config.EnableAdvancedMode = document.querySelector('#chkAdvancedMode').checked;
+                    config.TmdbBaseUrl = document.querySelector('#txtBaseUrl').value;
+
+                    // Collect enabled organizations
+                    var checkboxes = document.querySelectorAll('.org-checkbox');
+                    config.EnabledOrganizations = [];
+                    checkboxes.forEach(function (cb) {
+                        if (cb.checked) {
+                            config.EnabledOrganizations.push(cb.dataset.slug);
+                        }
+                    });
+
+                    ApiClient.updatePluginConfiguration(AwardsMetadataConfig.pluginUniqueId, config).then(function () {
+                        Dashboard.processPluginConfigurationUpdateResult();
+                    });
+                });
+                return false;
+            });
+
+        document.querySelector('#btnDiscover')
+            .addEventListener('click', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('AwardsMetadata/DiscoverOrganizations')
+                }).then(function () {
+                    ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
+                        renderOrganizations(config);
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Organizations discovered successfully.');
+                    });
+                }).catch(function () {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert('Failed to discover organizations.');
+                });
+            });
+
+        function renderOrganizations(config) {
+            var container = document.querySelector('#organizationsList');
+            var html = '';
+            if (config.AvailableOrganizations && config.AvailableOrganizations.length > 0) {
+                config.AvailableOrganizations.forEach(function (org) {
+                    var checked = config.EnabledOrganizations &&
+                        config.EnabledOrganizations.indexOf(org.Slug) >= 0 ? 'checked' : '';
+                    html += '<div class="checkboxContainer">';
+                    html += '<label><input type="checkbox" is="emby-checkbox" class="org-checkbox" data-slug="' +
+                        org.Slug + '" ' + checked + ' />';
+                    html += '<span>' + org.Name + '</span></label></div>';
+                });
+            } else {
+                html = '<p>No organizations discovered yet. Click "Discover Organizations" to query TMDB.</p>';
+            }
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
