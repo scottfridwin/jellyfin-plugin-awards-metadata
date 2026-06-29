@@ -1,0 +1,366 @@
+# jellyfin-awards-metadata
+
+## Summary
+
+Generate a complete solution for the `jellyfin-awards-metadata` project. The solution consists of a reusable awards scraping library and a Jellyfin plugin that uses the scraped data to apply award metadata tags to media items.
+
+The primary objective of the first iteration is correctness, maintainability, and extensibility rather than maximum performance.
+
+---
+
+# Solution Structure
+
+The solution should consist of the following projects.
+
+## tmdb-awards-scraper
+
+A reusable .NET library responsible for obtaining, parsing, validating, storing, and exposing awards metadata from TMDB.
+
+This library **owns the awards data model**. Consumers should interact with strongly typed objects rather than parsing JSON directly.
+
+Responsibilities include:
+
+* Discovering supported award types
+* Downloading HTML
+* Parsing HTML into strongly typed models
+* Persisting and loading awards databases
+* Import/export of JSON
+* Rate limiting
+* Retry handling
+* Logging
+* Data validation
+
+The library should not have any dependency on Jellyfin.
+
+---
+
+## jellyfin-awards-metadata-plugin
+
+A Jellyfin plugin responsible for:
+
+* Plugin configuration
+* Scheduled tasks
+* Persisting scraper configuration
+* Managing awards database
+* Applying/removing Jellyfin metadata tags
+* Jellyfin-specific logging
+
+The plugin should never parse HTML directly.
+
+---
+
+## Test Projects
+
+Appropriate testing projects should be included.
+
+At minimum:
+
+* Parser unit tests
+* HTML fixture tests
+* Tag generation tests
+* Persistence tests
+* Normalization tests
+
+---
+
+# Architecture
+
+The scraper should internally separate responsibilities into independent components.
+
+Example:
+
+Downloader
+
+↓
+
+HTML
+
+↓
+
+Parser
+
+↓
+
+Award Models
+
+↓
+
+Persistence
+
+↓
+
+Consumer
+
+Each component should be individually testable.
+
+---
+
+# Data Model
+
+The scraper library owns the canonical awards model.
+
+The model should represent awards independently from Jellyfin tags.
+
+Example:
+
+* Award Organization
+* Ceremony
+* Ceremony Year
+* Category
+* Nominee
+* Winner
+* TMDB Movie ID
+* TMDB Person IDs (when available)
+
+Tags are considered a derived projection of this data.
+
+---
+
+# Persistence
+
+The scraper should expose a persistence abstraction.
+
+Example:
+
+IAwardStore
+
+Implementations may include:
+
+* JSON
+* SQLite
+
+The initial implementation may use JSON.
+
+The storage format must include:
+
+* Schema version
+* Generated timestamp
+* Source information
+
+Example:
+
+* schemaVersion
+* generatedUtc
+* awards
+
+Future schema migrations should be possible.
+
+---
+
+# Scraper Requirements
+
+The scraper must:
+
+* Allow configurable TMDB endpoint (primarily for testing)
+* Use configurable rate limiting
+* Support configurable retry count
+* Respect Retry-After headers when available
+* Support configurable request timeout
+* Produce detailed logging
+* Discover available award types dynamically
+* Support scraping all available award types
+* Support scraping individual award types
+* Optionally support scraping individual ceremonies/years
+* Use TMDB IDs whenever possible
+* Expose strongly typed models
+* Provide JSON import/export helpers
+* Be idempotent
+
+Running the same scrape multiple times without TMDB changes must produce identical results.
+
+---
+
+# Jellyfin Plugin Requirements
+
+The Jellyfin plugin must:
+
+* Be a standard Jellyfin plugin
+* Provide a configuration page
+* Persist plugin configuration
+* Persist awards database
+* Expose scheduled tasks
+
+Required scheduled tasks:
+
+* Full awards scrape
+* Apply metadata tags
+* Remove stale managed tags
+
+Optional:
+
+* Incremental scrape of recent ceremonies
+
+The plugin should not expose the TMDB endpoint unless running in an advanced/debug mode.
+
+---
+
+# Plugin Configuration
+
+The plugin should support configuring:
+
+* Request rate limit
+* Retry count
+* Request timeout
+* Awards storage location
+* Award organizations to scrape
+* Enable winner tagging
+* Enable nominee tagging
+* Tag format
+
+The list of award organizations should initially be empty.
+
+A "Query Supported Awards" action should retrieve available organizations from TMDB and persist the discovered list.
+
+---
+
+# Tag Generation
+
+The plugin should support configurable tag formatting.
+
+Default:
+
+award-{awardType}-{awardResult}-{awardCategory}-{awardYear}
+
+Example:
+
+award-academy-awards-winner-best-picture-1999
+
+award-academy-awards-nominee-best-actor-2005
+
+Users should be able to simplify formats, for example:
+
+{awardType}-{awardResult}
+
+Result:
+
+academy-awards-winner
+
+academy-awards-nominee
+
+---
+
+# Normalization
+
+A centralized normalization service should be used for all generated tag values.
+
+Examples:
+
+Academy Awards
+
+↓
+
+academy-awards
+
+Best Original Screenplay
+
+↓
+
+best-original-screenplay
+
+Normalization rules should be shared throughout the solution.
+
+---
+
+# Managed Tags
+
+The plugin should only modify tags that it owns.
+
+Running the plugin must never remove or alter user-created tags.
+
+Generated tags should be tracked so they can be safely updated or removed when:
+
+* Tag format changes
+* Awards database changes
+* Configuration changes
+
+---
+
+# Logging
+
+Both projects should emit structured logs.
+
+Typical log output should include:
+
+* Award organization
+* Ceremony
+* Download progress
+* Parse progress
+* Number of nominations discovered
+* Number of tags generated
+* Errors
+* Retry attempts
+
+---
+
+# Error Handling
+
+Network failures should:
+
+* Retry configurable number of times
+* Respect Retry-After when possible
+* Continue scraping remaining organizations when appropriate
+* Produce actionable log messages
+
+Parser failures should clearly identify:
+
+* Award organization
+* Ceremony
+* HTML section
+* Failed element
+
+---
+
+# Idempotency
+
+All operations must be idempotent.
+
+Examples:
+
+Running a scrape twice should not create duplicate records.
+
+Running Apply Tags multiple times should never create duplicate Jellyfin tags.
+
+Running Remove Managed Tags repeatedly should be safe.
+
+---
+
+# Testing
+
+The scraper should use saved HTML fixtures for parser tests.
+
+Parser tests should not depend on the live TMDB website.
+
+Live integration tests should be optional.
+
+---
+
+# Considerations
+
+Awards data changes infrequently.
+
+Movies within Jellyfin change much more frequently.
+
+Therefore:
+
+* Scraping is expected to occur rarely.
+* Tag application may occur much more frequently.
+* Performance optimizations are not required for the initial implementation.
+
+Correctness, maintainability, and clean architecture are prioritized over optimization.
+
+---
+
+# Future Enhancements
+
+The architecture should allow future support for:
+
+* Additional awards providers
+* Additional metadata sources
+* SQLite persistence
+* Incremental synchronization
+* Person awards
+* TV awards
+* Custom Jellyfin UI for displaying awards
+* Additional metadata beyond tags
+
+The solution should be designed so that adding new providers does not require changes to the Jellyfin plugin.
