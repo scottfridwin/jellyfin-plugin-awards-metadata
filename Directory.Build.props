@@ -1,0 +1,6 @@
+<Project>
+    <PropertyGroup>
+        <!-- Local dev default. CI overrides via -p:Version= which cascades to all version properties -->
+        <Version>0.0.0.1</Version>
+    </PropertyGroup>
+</Project>
