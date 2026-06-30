@@ -39,12 +39,61 @@ public sealed class TmdbAwardsScraperService : IAwardsScraper
     {
         _logger.LogInformation("Discovering award organizations from {BaseUrl}", _options.BaseUrl);
 
-        var indexUrl = $"{_options.BaseUrl.TrimEnd('/')}/award";
-        var html = await _downloader.DownloadAsync(indexUrl, cancellationToken).ConfigureAwait(false);
-        var organizations = _indexParser.ParseIndex(html);
+        var allOrganizations = new List<AwardOrganization>();
+        var baseIndexUrl = $"{_options.BaseUrl.TrimEnd('/')}/award";
+        var page = 1;
+        const int maxPages = 20; // Safety limit
 
-        _logger.LogInformation("Discovered {Count} award organizations", organizations.Count);
-        return organizations;
+        while (page <= maxPages)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var pageUrl = page == 1 ? baseIndexUrl : $"{baseIndexUrl}?page={page}";
+            _logger.LogDebug("Fetching awards index page {Page}: {Url}", page, pageUrl);
+
+            string html;
+            try
+            {
+                html = await _downloader.DownloadAsync(pageUrl, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch awards index page {Page}, stopping pagination", page);
+                break;
+            }
+
+            var pageOrganizations = _indexParser.ParseIndex(html);
+
+            var newCount = 0;
+            foreach (var org in pageOrganizations)
+            {
+                if (!allOrganizations.Exists(o => o.Slug == org.Slug))
+                {
+                    allOrganizations.Add(org);
+                    newCount++;
+                }
+            }
+
+            _logger.LogDebug(
+                "Page {Page}: found {PageCount} organizations ({NewCount} new, {TotalCount} total)",
+                page,
+                pageOrganizations.Count,
+                newCount,
+                allOrganizations.Count);
+
+            if (newCount == 0)
+            {
+                _logger.LogDebug("No new organizations on page {Page}, stopping pagination", page);
+                break;
+            }
+
+            page++;
+        }
+
+        allOrganizations.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+
+        _logger.LogInformation("Discovered {Count} award organizations across {Pages} pages", allOrganizations.Count, page);
+        return allOrganizations;
     }
 
     /// <inheritdoc />
