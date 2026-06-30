@@ -8,12 +8,12 @@
     "owner": "scottfridwin",
     "versions": [
       {
-        "version": "0.0.0.7",
+        "version": "0.0.0.8",
         "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://scottfridwin.github.io/jellyfin-plugin-awards-metadata/dev/Jellyfin.Plugin.AwardsMetadata-dev-65c4972.zip",
-        "checksum": "f9d2d082e174802a56abaa1d68577790",
-        "timestamp": "2026-06-30T02:50:34Z",
-        "changelog": "Dev build 0.0.0.7"
+        "sourceUrl": "https://scottfridwin.github.io/jellyfin-plugin-awards-metadata/dev/Jellyfin.Plugin.AwardsMetadata-dev-fd194ce.zip",
+        "checksum": "6a7a1d3374ebe0a144e39e6270e4ad4b",
+        "timestamp": "2026-06-30T03:15:27Z",
+        "changelog": "Dev build 0.0.0.8"
       }
     ]
   }
