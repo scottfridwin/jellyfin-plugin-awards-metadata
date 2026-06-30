@@ -87,126 +87,121 @@
                 </form>
             </div>
         </div>
-    </div>
 
-    <script type="text/javascript">
-        var AwardsMetadataConfig = {
-            pluginUniqueId: '38895a18-37d8-4a0a-92f8-c38335820627'
-        };
+        <script type="text/javascript">
+            var AwardsMetadataConfig = {
+                pluginUniqueId: '38895a18-37d8-4a0a-92f8-c38335820627'
+            };
 
-        function loadConfiguration() {
-            Dashboard.showLoadingMsg();
-            ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
-                console.log('[AwardsMetadata] Configuration loaded:', JSON.stringify(config, null, 2));
+            document.querySelector('#AwardsMetadataConfigPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
+                        console.log('[AwardsMetadata] Configuration loaded:', JSON.stringify(config, null, 2));
 
-                document.querySelector('#txtRateLimitDelay').value = config.RateLimitDelayMs || 1000;
-                document.querySelector('#txtMaxRetry').value = (config.MaxRetryCount !== undefined && config.MaxRetryCount !== null) ? config.MaxRetryCount : 3;
-                document.querySelector('#txtTimeout').value = config.RequestTimeoutSeconds || 30;
-                document.querySelector('#chkEnableWinner').checked = (config.EnableWinnerTagging !== undefined) ? config.EnableWinnerTagging : true;
-                document.querySelector('#chkEnableNominee').checked = (config.EnableNomineeTagging !== undefined) ? config.EnableNomineeTagging : true;
-                document.querySelector('#txtTagFormat').value = config.TagFormat || 'award-{awardType}-{awardResult}-{awardCategory}-{awardYear}';
+                        document.querySelector('#txtRateLimitDelay').value = config.RateLimitDelayMs || 1000;
+                        document.querySelector('#txtMaxRetry').value = (config.MaxRetryCount !== undefined && config.MaxRetryCount !== null) ? config.MaxRetryCount : 3;
+                        document.querySelector('#txtTimeout').value = config.RequestTimeoutSeconds || 30;
+                        document.querySelector('#chkEnableWinner').checked = (config.EnableWinnerTagging !== undefined) ? config.EnableWinnerTagging : true;
+                        document.querySelector('#chkEnableNominee').checked = (config.EnableNomineeTagging !== undefined) ? config.EnableNomineeTagging : true;
+                        document.querySelector('#txtTagFormat').value = config.TagFormat || 'award-{awardType}-{awardResult}-{awardCategory}-{awardYear}';
 
-                renderOrganizations(config);
-                Dashboard.hideLoadingMsg();
-            }).catch(function (err) {
-                console.error('[AwardsMetadata] Failed to load configuration:', err);
-                Dashboard.hideLoadingMsg();
-            });
-        }
-
-        document.querySelector('#AwardsMetadataConfigPage')
-            .addEventListener('pageshow', loadConfiguration);
-
-        document.querySelector('#AwardsMetadataConfigPage')
-            .addEventListener('viewshow', loadConfiguration);
-
-        document.querySelector('#AwardsMetadataConfigForm')
-            .addEventListener('submit', function (e) {
-                e.preventDefault();
-                Dashboard.showLoadingMsg();
-                ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
-                    config.RateLimitDelayMs = parseInt(document.querySelector('#txtRateLimitDelay').value) || 1000;
-                    config.MaxRetryCount = parseInt(document.querySelector('#txtMaxRetry').value) || 3;
-                    config.RequestTimeoutSeconds = parseInt(document.querySelector('#txtTimeout').value) || 30;
-                    config.EnableWinnerTagging = document.querySelector('#chkEnableWinner').checked;
-                    config.EnableNomineeTagging = document.querySelector('#chkEnableNominee').checked;
-                    config.TagFormat = document.querySelector('#txtTagFormat').value || 'award-{awardType}-{awardResult}-{awardCategory}-{awardYear}';
-
-                    var checkboxes = document.querySelectorAll('.org-checkbox');
-                    config.EnabledOrganizations = [];
-                    checkboxes.forEach(function (cb) {
-                        if (cb.checked) {
-                            config.EnabledOrganizations.push(cb.dataset.slug);
-                        }
-                    });
-
-                    console.log('[AwardsMetadata] Saving configuration:', JSON.stringify(config, null, 2));
-
-                    ApiClient.updatePluginConfiguration(AwardsMetadataConfig.pluginUniqueId, config).then(function () {
-                        Dashboard.processPluginConfigurationUpdateResult();
+                        renderOrganizations(config);
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function (err) {
+                        console.error('[AwardsMetadata] Failed to load configuration:', err);
+                        Dashboard.hideLoadingMsg();
                     });
                 });
-                return false;
-            });
 
-        document.querySelector('#btnDiscover')
-            .addEventListener('click', function () {
-                var btn = document.querySelector('#btnDiscover');
-                var btnText = document.querySelector('#btnDiscoverText');
-                var statusEl = document.querySelector('#discoverStatus');
-
-                btn.disabled = true;
-                btnText.textContent = 'Discovering...';
-                statusEl.style.display = '';
-                statusEl.innerHTML = '<p>Querying TMDB for available award organizations. This may take a moment...</p>';
-
-                console.log('[AwardsMetadata] Starting organization discovery...');
-
-                ApiClient.ajax({
-                    type: 'POST',
-                    url: ApiClient.getUrl('AwardsMetadata/DiscoverOrganizations')
-                }).then(function (response) {
-                    console.log('[AwardsMetadata] Discovery response:', response);
-
+            document.querySelector('#AwardsMetadataConfigForm')
+                .addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
-                        var count = (config.AvailableOrganizations && config.AvailableOrganizations.length) || 0;
-                        renderOrganizations(config);
+                        config.RateLimitDelayMs = parseInt(document.querySelector('#txtRateLimitDelay').value) || 1000;
+                        config.MaxRetryCount = parseInt(document.querySelector('#txtMaxRetry').value) || 3;
+                        config.RequestTimeoutSeconds = parseInt(document.querySelector('#txtTimeout').value) || 30;
+                        config.EnableWinnerTagging = document.querySelector('#chkEnableWinner').checked;
+                        config.EnableNomineeTagging = document.querySelector('#chkEnableNominee').checked;
+                        config.TagFormat = document.querySelector('#txtTagFormat').value || 'award-{awardType}-{awardResult}-{awardCategory}-{awardYear}';
+
+                        var checkboxes = document.querySelectorAll('.org-checkbox');
+                        config.EnabledOrganizations = [];
+                        checkboxes.forEach(function (cb) {
+                            if (cb.checked) {
+                                config.EnabledOrganizations.push(cb.dataset.slug);
+                            }
+                        });
+
+                        console.log('[AwardsMetadata] Saving configuration:', JSON.stringify(config, null, 2));
+
+                        ApiClient.updatePluginConfiguration(AwardsMetadataConfig.pluginUniqueId, config).then(function () {
+                            Dashboard.processPluginConfigurationUpdateResult();
+                        });
+                    });
+                    return false;
+                });
+
+            document.querySelector('#btnDiscover')
+                .addEventListener('click', function () {
+                    var btn = document.querySelector('#btnDiscover');
+                    var btnText = document.querySelector('#btnDiscoverText');
+                    var statusEl = document.querySelector('#discoverStatus');
+
+                    btn.disabled = true;
+                    btnText.textContent = 'Discovering...';
+                    statusEl.style.display = '';
+                    statusEl.innerHTML = '<p>Querying TMDB for available award organizations. This may take a moment...</p>';
+
+                    console.log('[AwardsMetadata] Starting organization discovery...');
+
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('AwardsMetadata/DiscoverOrganizations')
+                    }).then(function (response) {
+                        console.log('[AwardsMetadata] Discovery response:', response);
+
+                        ApiClient.getPluginConfiguration(AwardsMetadataConfig.pluginUniqueId).then(function (config) {
+                            var count = (config.AvailableOrganizations && config.AvailableOrganizations.length) || 0;
+                            renderOrganizations(config);
+
+                            btn.disabled = false;
+                            btnText.textContent = 'Discover Organizations';
+                            statusEl.innerHTML = '<p style="color: green;">&#10003; Discovered ' + count + ' award organizations. Select the ones you want to track, then click Save.</p>';
+
+                            console.log('[AwardsMetadata] Discovery complete: ' + count + ' organizations found');
+                            Dashboard.hideLoadingMsg();
+                        });
+                    }).catch(function (err) {
+                        console.error('[AwardsMetadata] Discovery failed:', err);
 
                         btn.disabled = false;
                         btnText.textContent = 'Discover Organizations';
-                        statusEl.innerHTML = '<p style="color: green;">&#10003; Discovered ' + count + ' award organizations. Select the ones you want to track, then click Save.</p>';
+                        statusEl.innerHTML = '<p style="color: red;">&#10007; Failed to discover organizations. Check the Jellyfin server logs for details.</p>';
 
-                        console.log('[AwardsMetadata] Discovery complete: ' + count + ' organizations found');
                         Dashboard.hideLoadingMsg();
                     });
-                }).catch(function (err) {
-                    console.error('[AwardsMetadata] Discovery failed:', err);
-
-                    btn.disabled = false;
-                    btnText.textContent = 'Discover Organizations';
-                    statusEl.innerHTML = '<p style="color: red;">&#10007; Failed to discover organizations. Check the Jellyfin server logs for details.</p>';
-
-                    Dashboard.hideLoadingMsg();
                 });
-            });
 
-        function renderOrganizations(config) {
-            var container = document.querySelector('#organizationsList');
-            var html = '';
-            if (config.AvailableOrganizations && config.AvailableOrganizations.length > 0) {
-                config.AvailableOrganizations.forEach(function (org) {
-                    var checked = config.EnabledOrganizations &&
-                        config.EnabledOrganizations.indexOf(org.Slug) >= 0 ? 'checked' : '';
-                    html += '<div class="checkboxContainer">';
-                    html += '<label><input type="checkbox" is="emby-checkbox" class="org-checkbox" data-slug="' +
-                        org.Slug + '" ' + checked + ' />';
-                    html += '<span>' + org.Name + '</span></label></div>';
-                });
-            } else {
-                html = '<p>No organizations discovered yet. Click "Discover Organizations" to query TMDB.</p>';
+            function renderOrganizations(config) {
+                var container = document.querySelector('#organizationsList');
+                var html = '';
+                if (config.AvailableOrganizations && config.AvailableOrganizations.length > 0) {
+                    config.AvailableOrganizations.forEach(function (org) {
+                        var checked = config.EnabledOrganizations &&
+                            config.EnabledOrganizations.indexOf(org.Slug) >= 0 ? 'checked' : '';
+                        html += '<div class="checkboxContainer">';
+                        html += '<label><input type="checkbox" is="emby-checkbox" class="org-checkbox" data-slug="' +
+                            org.Slug + '" ' + checked + ' />';
+                        html += '<span>' + org.Name + '</span></label></div>';
+                    });
+                } else {
+                    html = '<p>No organizations discovered yet. Click "Discover Organizations" to query TMDB.</p>';
+                }
+                container.innerHTML = html;
             }
-            container.innerHTML = html;
-        }
-    </script>
+        </script>
+    </div>
 </body>
 </html>
