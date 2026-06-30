@@ -57,12 +57,7 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     public string TagFormat { get; set; } = "award-{awardType}-{awardResult}-{awardCategory}-{awardYear}";
 
     /// <summary>
-    /// Gets or sets a value indicating whether the advanced TMDB endpoint setting is visible.
-    /// </summary>
-    public bool EnableAdvancedMode { get; set; }
-
-    /// <summary>
-    /// Gets or sets the TMDB base URL (only used in advanced/debug mode).
+    /// Gets or sets the TMDB base URL. Not exposed in the UI; intended for testing.
     /// </summary>
     public string TmdbBaseUrl { get; set; } = "https://www.themoviedb.org";
 }
