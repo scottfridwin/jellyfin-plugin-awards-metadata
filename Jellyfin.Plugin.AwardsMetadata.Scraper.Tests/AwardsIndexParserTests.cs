@@ -21,9 +21,9 @@ public class AwardsIndexParserTests
         var organizations = _parser.ParseIndex(html);
 
         Assert.NotEmpty(organizations);
-        Assert.Contains(organizations, o => o.Slug == "academy-awards");
-        Assert.Contains(organizations, o => o.Slug == "golden-globes");
-        Assert.Contains(organizations, o => o.Slug == "bafta-awards");
+        Assert.Contains(organizations, o => o.Slug == "1-academy-awards");
+        Assert.Contains(organizations, o => o.Slug == "4-golden-globes");
+        Assert.Contains(organizations, o => o.Slug == "5-bafta-film-awards");
     }
 
     [Fact]
@@ -33,9 +33,9 @@ public class AwardsIndexParserTests
 
         var organizations = _parser.ParseIndex(html);
 
-        var academyAwards = organizations.First(o => o.Slug == "academy-awards");
+        var academyAwards = organizations.First(o => o.Slug == "1-academy-awards");
         Assert.Equal("Academy Awards", academyAwards.Name);
-        Assert.Equal("/award/academy-awards", academyAwards.RelativeUrl);
+        Assert.Equal("/award/1-academy-awards", academyAwards.RelativeUrl);
     }
 
     [Fact]
@@ -62,8 +62,8 @@ public class AwardsIndexParserTests
         var org = new Models.AwardOrganization
         {
             Name = "Academy Awards",
-            Slug = "academy-awards",
-            RelativeUrl = "/award/academy-awards",
+            Slug = "1-academy-awards",
+            RelativeUrl = "/award/1-academy-awards",
         };
 
         var ceremonies = _parser.ParseCeremonyList(html, org);
@@ -80,14 +80,14 @@ public class AwardsIndexParserTests
         var org = new Models.AwardOrganization
         {
             Name = "Academy Awards",
-            Slug = "academy-awards",
-            RelativeUrl = "/award/academy-awards",
+            Slug = "1-academy-awards",
+            RelativeUrl = "/award/1-academy-awards",
         };
 
         var ceremonies = _parser.ParseCeremonyList(html, org);
 
         var ceremony2024 = ceremonies.First(c => c.Year == 2024);
-        Assert.Equal("/award/academy-awards/2024", ceremony2024.RelativeUrl);
+        Assert.Equal("/award/1-academy-awards/ceremony/96", ceremony2024.RelativeUrl);
     }
 
     [Fact]
@@ -97,8 +97,8 @@ public class AwardsIndexParserTests
         var org = new Models.AwardOrganization
         {
             Name = "Academy Awards",
-            Slug = "academy-awards",
-            RelativeUrl = "/award/academy-awards",
+            Slug = "1-academy-awards",
+            RelativeUrl = "/award/1-academy-awards",
         };
 
         var ceremonies = _parser.ParseCeremonyList(html, org);
@@ -114,8 +114,8 @@ public class AwardsIndexParserTests
         var org = new Models.AwardOrganization
         {
             Name = "Academy Awards",
-            Slug = "academy-awards",
-            RelativeUrl = "/award/academy-awards",
+            Slug = "1-academy-awards",
+            RelativeUrl = "/award/1-academy-awards",
         };
 
         var ceremonies = _parser.ParseCeremonyList(html, org);

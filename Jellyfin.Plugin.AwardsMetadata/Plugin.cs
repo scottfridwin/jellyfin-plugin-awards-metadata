@@ -1,9 +1,9 @@
-using System.Reflection;
 using Jellyfin.Plugin.AwardsMetadata.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.AwardsMetadata;
 
@@ -12,15 +12,21 @@ namespace Jellyfin.Plugin.AwardsMetadata;
 /// </summary>
 public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
+    private readonly ILogger<Plugin> _logger;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Plugin"/> class.
     /// </summary>
     /// <param name="applicationPaths">Instance of <see cref="IApplicationPaths"/>.</param>
     /// <param name="xmlSerializer">Instance of <see cref="IXmlSerializer"/>.</param>
-    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
+    /// <param name="logger">Logger instance.</param>
+    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogger<Plugin> logger)
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
+        _logger = logger;
+
+        _logger.LogInformation("Awards Metadata plugin initialized. Version: {Version}, DataFolder: {DataFolder}", Version, DataFolderPath);
     }
 
     /// <summary>
@@ -47,6 +53,27 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         if (string.IsNullOrWhiteSpace(storagePath))
         {
             storagePath = Path.Combine(DataFolderPath, "awards-database.json");
+            _logger.LogDebug("Using default awards database path: {Path}", storagePath);
+        }
+        else
+        {
+            // Validate the configured path is within the plugin data folder to prevent path traversal
+            var resolvedPath = Path.GetFullPath(storagePath);
+            var dataFolderFull = Path.GetFullPath(DataFolderPath + Path.DirectorySeparatorChar);
+
+            if (!resolvedPath.StartsWith(dataFolderFull, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Configured AwardsStoragePath '{ConfiguredPath}' is outside the plugin data folder. Falling back to default",
+                    storagePath);
+                storagePath = Path.Combine(DataFolderPath, "awards-database.json");
+            }
+            else
+            {
+                storagePath = resolvedPath;
+            }
+
+            _logger.LogDebug("Using awards database path: {Path}", storagePath);
         }
 
         return storagePath;
@@ -58,7 +85,9 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <returns>The full path to the managed tags JSON file.</returns>
     public string GetManagedTagsPath()
     {
-        return Path.Combine(DataFolderPath, "managed-tags.json");
+        var path = Path.Combine(DataFolderPath, "managed-tags.json");
+        _logger.LogDebug("Managed tags path: {Path}", path);
+        return path;
     }
 
     /// <inheritdoc />

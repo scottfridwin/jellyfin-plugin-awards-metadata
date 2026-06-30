@@ -95,8 +95,9 @@ public sealed partial class TmdbAwardsIndexParser : IAwardsIndexParser
 
         var ceremonies = new List<CeremonyReference>();
 
-        // Look for year links within the organization page
-        var links = doc.DocumentNode.SelectNodes($"//a[contains(@href, '/award/{organization.Slug}/')]");
+        // Look for ceremony links within the organization page
+        // TMDB uses URLs like /award/1-academy-awards/ceremony/97
+        var links = doc.DocumentNode.SelectNodes($"//a[contains(@href, '/award/{organization.Slug}/ceremony/')]");
         if (links is null)
         {
             _logger.LogWarning("No ceremony links found for organization {Organization}", organization.Name);
@@ -107,14 +108,26 @@ public sealed partial class TmdbAwardsIndexParser : IAwardsIndexParser
         {
             var href = link.GetAttributeValue("href", string.Empty);
 
-            // Match links like /award/academy-awards/2024
-            var match = CeremonyYearRegex().Match(href);
-            if (!match.Success)
+            // Match links like /award/1-academy-awards/ceremony/97
+            var ceremonyMatch = CeremonyUrlRegex().Match(href);
+            if (!ceremonyMatch.Success)
             {
                 continue;
             }
 
-            var year = int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            // Extract year from link text like "97th Academy Awards (2025)"
+            var linkText = link.InnerText?.Trim() ?? string.Empty;
+            var yearMatch = YearInTextRegex().Match(linkText);
+            if (!yearMatch.Success)
+            {
+                _logger.LogDebug(
+                    "Ceremony link found but could not extract year from text: '{Text}' (href: {Href})",
+                    linkText,
+                    href);
+                continue;
+            }
+
+            var year = int.Parse(yearMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
 
             // Avoid duplicates
             if (ceremonies.Exists(c => c.Year == year))
@@ -137,6 +150,9 @@ public sealed partial class TmdbAwardsIndexParser : IAwardsIndexParser
     [GeneratedRegex(@"/award/([a-z0-9-]+)$", RegexOptions.IgnoreCase)]
     private static partial Regex AwardSlugRegex();
 
-    [GeneratedRegex(@"/award/[a-z0-9-]+/(\d{4})", RegexOptions.IgnoreCase)]
-    private static partial Regex CeremonyYearRegex();
+    [GeneratedRegex(@"/award/[a-z0-9-]+/ceremony/(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex CeremonyUrlRegex();
+
+    [GeneratedRegex(@"\((\d{4})\)")]
+    private static partial Regex YearInTextRegex();
 }

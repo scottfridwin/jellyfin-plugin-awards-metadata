@@ -8,29 +8,31 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.AwardsMetadata.ScheduledTasks;
 
 /// <summary>
-/// Scheduled task that removes stale managed tags that are no longer applicable.
+/// Scheduled task that removes existing managed tags that are no longer applicable.
 /// </summary>
-public sealed class RemoveStaleManagedTagsTask : IScheduledTask
+public sealed class RemoveExistingManagedTagsTask : IScheduledTask
 {
     private readonly ILibraryManager _libraryManager;
-    private readonly ILogger<RemoveStaleManagedTagsTask> _logger;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger<RemoveExistingManagedTagsTask> _logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RemoveStaleManagedTagsTask"/> class.
+    /// Initializes a new instance of the <see cref="RemoveExistingManagedTagsTask"/> class.
     /// </summary>
     /// <param name="libraryManager">Jellyfin library manager.</param>
     /// <param name="loggerFactory">Logger factory.</param>
-    public RemoveStaleManagedTagsTask(ILibraryManager libraryManager, ILoggerFactory loggerFactory)
+    public RemoveExistingManagedTagsTask(ILibraryManager libraryManager, ILoggerFactory loggerFactory)
     {
         _libraryManager = libraryManager;
-        _logger = loggerFactory.CreateLogger<RemoveStaleManagedTagsTask>();
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<RemoveExistingManagedTagsTask>();
     }
 
     /// <inheritdoc />
-    public string Name => "Remove Stale Award Tags";
+    public string Name => "Remove Existing Award Tags";
 
     /// <inheritdoc />
-    public string Key => "AwardsMetadataRemoveStaleTags";
+    public string Key => "AwardsMetadataRemoveExistingTags";
 
     /// <inheritdoc />
     public string Description => "Removes award metadata tags that are no longer managed by the plugin.";
@@ -54,7 +56,11 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
             return;
         }
 
-        var managedTagStore = new TagGeneration.JsonManagedTagStore(plugin.GetManagedTagsPath());
+        var managedTagsPath = plugin.GetManagedTagsPath();
+        _logger.LogDebug("Loading managed tags from {Path}", managedTagsPath);
+        var managedTagStore = new TagGeneration.JsonManagedTagStore(
+            managedTagsPath,
+            _loggerFactory.CreateLogger<TagGeneration.JsonManagedTagStore>());
         await managedTagStore.LoadAsync(cancellationToken).ConfigureAwait(false);
 
         var trackedItems = managedTagStore.GetAllTrackedItemIds();
@@ -65,7 +71,7 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
             return;
         }
 
-        _logger.LogInformation("Checking {Count} items for stale managed tags", trackedItems.Count);
+        _logger.LogInformation("Checking {Count} items for existing managed tags", trackedItems.Count);
 
         var itemsUpdated = 0;
         var tagsRemoved = 0;
@@ -80,7 +86,7 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
             var item = _libraryManager.GetItemById(itemId);
             if (item is null)
             {
-                // Item no longer exists, clean up tracking
+                _logger.LogDebug("Item {ItemId} no longer exists in library, cleaning up managed tag tracking", itemId);
                 managedTagStore.RemoveManagedTags(itemId);
                 continue;
             }
@@ -105,9 +111,22 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
 
             if (modified)
             {
+                var parent = item.GetParent();
+                if (parent is null)
+                {
+                    _logger.LogWarning("Skipping update for '{ItemName}' ({ItemId}) — no parent item found", item.Name, itemId);
+                    managedTagStore.RemoveManagedTags(itemId);
+                    continue;
+                }
+
                 item.Tags = [.. currentTags];
-                await _libraryManager.UpdateItemAsync(item, item.GetParent()!, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                await _libraryManager.UpdateItemAsync(item, parent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 itemsUpdated++;
+                _logger.LogDebug(
+                    "Removed {TagCount} existing tags from '{ItemName}' ({ItemId})",
+                    managedTags.Count,
+                    item.Name,
+                    itemId);
             }
 
             managedTagStore.RemoveManagedTags(itemId);
@@ -116,7 +135,7 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
         await managedTagStore.SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Stale tag removal complete: {TagsRemoved} tags removed from {ItemsUpdated} items",
+            "Existing tag removal complete: {TagsRemoved} tags removed from {ItemsUpdated} items",
             tagsRemoved,
             itemsUpdated);
 
