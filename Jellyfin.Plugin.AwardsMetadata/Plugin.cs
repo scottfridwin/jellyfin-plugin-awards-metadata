@@ -58,7 +58,23 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         }
         else
         {
-            _logger.LogDebug("Using configured awards database path: {Path}", storagePath);
+            // Validate the configured path is within the plugin data folder to prevent path traversal
+            var resolvedPath = Path.GetFullPath(storagePath);
+            var dataFolderFull = Path.GetFullPath(DataFolderPath + Path.DirectorySeparatorChar);
+
+            if (!resolvedPath.StartsWith(dataFolderFull, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Configured AwardsStoragePath '{ConfiguredPath}' is outside the plugin data folder. Falling back to default",
+                    storagePath);
+                storagePath = Path.Combine(DataFolderPath, "awards-database.json");
+            }
+            else
+            {
+                storagePath = resolvedPath;
+            }
+
+            _logger.LogDebug("Using awards database path: {Path}", storagePath);
         }
 
         return storagePath;

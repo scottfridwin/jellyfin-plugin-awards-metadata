@@ -13,15 +13,18 @@ namespace Jellyfin.Plugin.AwardsMetadata.ScheduledTasks;
 /// </summary>
 public sealed class ScrapeAwardsTask : IScheduledTask
 {
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ScrapeAwardsTask> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScrapeAwardsTask"/> class.
     /// </summary>
+    /// <param name="httpClientFactory">HTTP client factory.</param>
     /// <param name="loggerFactory">Logger factory.</param>
-    public ScrapeAwardsTask(ILoggerFactory loggerFactory)
+    public ScrapeAwardsTask(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory)
     {
+        _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<ScrapeAwardsTask>();
     }
@@ -71,9 +74,20 @@ public sealed class ScrapeAwardsTask : IScheduledTask
             return;
         }
 
+        string validatedBaseUrl;
+        try
+        {
+            validatedBaseUrl = config.GetValidatedTmdbBaseUrl();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid TmdbBaseUrl configuration. Aborting scrape");
+            return;
+        }
+
         _logger.LogDebug(
             "Scrape configuration: BaseUrl={BaseUrl}, RateLimitDelayMs={RateLimit}, MaxRetryCount={MaxRetry}, RequestTimeoutSeconds={Timeout}, Organizations=[{Organizations}]",
-            config.TmdbBaseUrl,
+            validatedBaseUrl,
             config.RateLimitDelayMs,
             config.MaxRetryCount,
             config.RequestTimeoutSeconds,
@@ -81,13 +95,13 @@ public sealed class ScrapeAwardsTask : IScheduledTask
 
         var scraperOptions = new ScraperOptions
         {
-            BaseUrl = config.TmdbBaseUrl,
+            BaseUrl = validatedBaseUrl,
             RateLimitDelayMs = config.RateLimitDelayMs,
             MaxRetryCount = config.MaxRetryCount,
             RequestTimeoutSeconds = config.RequestTimeoutSeconds,
         };
 
-        using var httpClient = new HttpClient();
+        using var httpClient = _httpClientFactory.CreateClient(nameof(ScrapeAwardsTask));
         var downloader = new HttpHtmlDownloader(
             httpClient,
             scraperOptions,

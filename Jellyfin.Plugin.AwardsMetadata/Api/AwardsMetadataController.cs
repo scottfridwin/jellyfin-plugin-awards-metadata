@@ -21,15 +21,18 @@ namespace Jellyfin.Plugin.AwardsMetadata.Api;
 [Produces(MediaTypeNames.Application.Json)]
 public class AwardsMetadataController : ControllerBase
 {
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<AwardsMetadataController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AwardsMetadataController"/> class.
     /// </summary>
+    /// <param name="httpClientFactory">HTTP client factory.</param>
     /// <param name="loggerFactory">Logger factory.</param>
-    public AwardsMetadataController(ILoggerFactory loggerFactory)
+    public AwardsMetadataController(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory)
     {
+        _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<AwardsMetadataController>();
     }
@@ -51,22 +54,34 @@ public class AwardsMetadataController : ControllerBase
         }
 
         var config = plugin.Configuration;
+
+        string validatedBaseUrl;
+        try
+        {
+            validatedBaseUrl = config.GetValidatedTmdbBaseUrl();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid TmdbBaseUrl configuration");
+            return StatusCode(StatusCodes.Status500InternalServerError, "Invalid TmdbBaseUrl configuration");
+        }
+
         _logger.LogDebug(
             "DiscoverOrganizations: BaseUrl={BaseUrl}, RateLimitDelayMs={RateLimit}, MaxRetryCount={MaxRetry}, RequestTimeoutSeconds={Timeout}",
-            config.TmdbBaseUrl,
+            validatedBaseUrl,
             config.RateLimitDelayMs,
             config.MaxRetryCount,
             config.RequestTimeoutSeconds);
 
         var scraperOptions = new ScraperOptions
         {
-            BaseUrl = config.TmdbBaseUrl,
+            BaseUrl = validatedBaseUrl,
             RateLimitDelayMs = config.RateLimitDelayMs,
             MaxRetryCount = config.MaxRetryCount,
             RequestTimeoutSeconds = config.RequestTimeoutSeconds,
         };
 
-        using var httpClient = new HttpClient();
+        using var httpClient = _httpClientFactory.CreateClient(nameof(AwardsMetadataController));
         var downloader = new HttpHtmlDownloader(
             httpClient,
             scraperOptions,

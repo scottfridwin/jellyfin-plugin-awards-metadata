@@ -52,7 +52,10 @@ public sealed class JsonAwardStore : IAwardStore
 
         try
         {
-            await File.WriteAllTextAsync(_filePath, json, cancellationToken).ConfigureAwait(false);
+            // Atomic write: write to temp file, then rename to prevent corruption on crash
+            var tempPath = _filePath + ".tmp";
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, _filePath, overwrite: true);
         }
         catch (Exception ex)
         {
@@ -69,6 +72,11 @@ public sealed class JsonAwardStore : IAwardStore
             totalNominations);
     }
 
+    /// <summary>
+    /// Maximum allowed file size for the awards database file (200 MB).
+    /// </summary>
+    private const long MaxFileSize = 200 * 1024 * 1024;
+
     /// <inheritdoc />
     public async Task<AwardsDatabase?> LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -78,7 +86,18 @@ public sealed class JsonAwardStore : IAwardStore
             return null;
         }
 
-        _logger.LogDebug("Reading awards database file ({Size} bytes)", new FileInfo(_filePath).Length);
+        var fileInfo = new FileInfo(_filePath);
+        if (fileInfo.Length > MaxFileSize)
+        {
+            _logger.LogError(
+                "Awards database file at {Path} is too large ({Size} bytes, max {Max} bytes). Refusing to load",
+                _filePath,
+                fileInfo.Length,
+                MaxFileSize);
+            return null;
+        }
+
+        _logger.LogDebug("Reading awards database file ({Size} bytes)", fileInfo.Length);
         var json = await File.ReadAllTextAsync(_filePath, cancellationToken).ConfigureAwait(false);
 
         AwardsDatabase? database;

@@ -194,8 +194,15 @@ public sealed class ApplyTagsTask : IScheduledTask
             // Save changes to the movie if modified
             if (tagsAdded || previousManagedTags.Except(newTags).Any())
             {
+                var parent = movie.GetParent();
+                if (parent is null)
+                {
+                    _logger.LogWarning("Skipping update for '{MovieName}' — no parent item found", movie.Name);
+                    continue;
+                }
+
                 movie.Tags = [.. currentTags];
-                await _libraryManager.UpdateItemAsync(movie, movie.GetParent()!, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                await _libraryManager.UpdateItemAsync(movie, parent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 moviesUpdated++;
                 _logger.LogDebug(
                     "Updated tags for '{MovieName}' (TMDB {TmdbId}): {TagCount} managed tags",

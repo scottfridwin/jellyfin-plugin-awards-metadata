@@ -111,8 +111,16 @@ public sealed class RemoveExistingManagedTagsTask : IScheduledTask
 
             if (modified)
             {
+                var parent = item.GetParent();
+                if (parent is null)
+                {
+                    _logger.LogWarning("Skipping update for '{ItemName}' ({ItemId}) — no parent item found", item.Name, itemId);
+                    managedTagStore.RemoveManagedTags(itemId);
+                    continue;
+                }
+
                 item.Tags = [.. currentTags];
-                await _libraryManager.UpdateItemAsync(item, item.GetParent()!, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                await _libraryManager.UpdateItemAsync(item, parent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 itemsUpdated++;
                 _logger.LogDebug(
                     "Removed {TagCount} existing tags from '{ItemName}' ({ItemId})",

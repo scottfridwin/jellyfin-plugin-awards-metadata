@@ -184,6 +184,18 @@
                     });
                 });
 
+            function escapeHtml(text) {
+                var div = document.createElement('div');
+                div.appendChild(document.createTextNode(text || ''));
+                return div.innerHTML;
+            }
+
+            function escapeAttr(text) {
+                return (text || '').replace(/[&"'<>]/g, function (c) {
+                    return {'&':'&amp;','"':'&quot;',"'":'&#39;','<':'&lt;','>':'&gt;'}[c];
+                });
+            }
+
             function renderOrganizations(config) {
                 var container = document.querySelector('#organizationsList');
                 var html = '';
@@ -193,8 +205,8 @@
                             config.EnabledOrganizations.indexOf(org.Slug) >= 0 ? 'checked' : '';
                         html += '<div class="checkboxContainer">';
                         html += '<label><input type="checkbox" is="emby-checkbox" class="org-checkbox" data-slug="' +
-                            org.Slug + '" ' + checked + ' />';
-                        html += '<span>' + org.Name + '</span></label></div>';
+                            escapeAttr(org.Slug) + '" ' + checked + ' />';
+                        html += '<span>' + escapeHtml(org.Name) + '</span></label></div>';
                     });
                 } else {
                     html = '<p>No organizations discovered yet. Click "Discover Organizations" to query TMDB.</p>';

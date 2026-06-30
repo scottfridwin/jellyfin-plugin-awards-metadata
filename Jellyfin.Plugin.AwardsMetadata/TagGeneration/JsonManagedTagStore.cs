@@ -76,7 +76,12 @@ public sealed class JsonManagedTagStore : IManagedTagStore
         try
         {
             var json = JsonSerializer.Serialize(data, SerializerOptions);
-            await File.WriteAllTextAsync(_filePath, json, cancellationToken).ConfigureAwait(false);
+
+            // Atomic write: write to temp file, then rename to prevent corruption on crash
+            var tempPath = _filePath + ".tmp";
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, _filePath, overwrite: true);
+
             _logger.LogInformation("Managed tags saved: {Items} items, {Tags} total tags", _managedTags.Count, totalTags);
         }
         catch (Exception ex)
@@ -85,6 +90,11 @@ public sealed class JsonManagedTagStore : IManagedTagStore
             throw;
         }
     }
+
+    /// <summary>
+    /// Maximum allowed file size for the managed tags file (50 MB).
+    /// </summary>
+    private const long MaxFileSize = 50 * 1024 * 1024;
 
     /// <inheritdoc />
     public async Task LoadAsync(CancellationToken cancellationToken = default)
@@ -98,7 +108,19 @@ public sealed class JsonManagedTagStore : IManagedTagStore
 
         try
         {
-            _logger.LogDebug("Loading managed tags from {Path}", _filePath);
+            var fileInfo = new FileInfo(_filePath);
+            if (fileInfo.Length > MaxFileSize)
+            {
+                _logger.LogError(
+                    "Managed tags file at {Path} is too large ({Size} bytes, max {Max} bytes). Starting with empty store",
+                    _filePath,
+                    fileInfo.Length,
+                    MaxFileSize);
+                _managedTags = [];
+                return;
+            }
+
+            _logger.LogDebug("Loading managed tags from {Path} ({Size} bytes)", _filePath, fileInfo.Length);
             var json = await File.ReadAllTextAsync(_filePath, cancellationToken).ConfigureAwait(false);
             var data = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json, SerializerOptions);
 
