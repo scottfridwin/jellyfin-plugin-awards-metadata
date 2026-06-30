@@ -17,13 +17,13 @@ public class CeremonyParserTests
         _organization = new AwardOrganization
         {
             Name = "Academy Awards",
-            Slug = "academy-awards",
-            RelativeUrl = "/award/academy-awards",
+            Slug = "1-academy-awards",
+            RelativeUrl = "/award/1-academy-awards",
         };
         _ceremonyRef = new CeremonyReference
         {
             Year = 2024,
-            RelativeUrl = "/award/academy-awards/2024",
+            RelativeUrl = "/award/1-academy-awards/ceremony/96",
         };
     }
 
@@ -35,7 +35,7 @@ public class CeremonyParserTests
         var ceremony = _parser.ParseCeremony(html, _organization, _ceremonyRef);
 
         Assert.NotNull(ceremony);
-        Assert.Equal("academy-awards", ceremony.OrganizationSlug);
+        Assert.Equal("1-academy-awards", ceremony.OrganizationSlug);
         Assert.Equal("Academy Awards", ceremony.OrganizationName);
         Assert.Equal(2024, ceremony.Year);
     }
@@ -64,7 +64,7 @@ public class CeremonyParserTests
         var winners = bestPicture.Nominations.Where(n => n.Result == AwardResult.Winner).ToList();
 
         Assert.Single(winners);
-        Assert.Contains("Oppenheimer", winners[0].Name);
+        Assert.Equal("Oppenheimer", winners[0].Name);
     }
 
     [Fact]

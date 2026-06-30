@@ -57,19 +57,17 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
 
     private void ParseCategories(HtmlDocument doc, AwardCeremony ceremony)
     {
-        // TMDB ceremony pages use panels/sections for each category
-        // Look for category sections - TMDB typically uses a structure with category headers and nominee lists
-        var categorySections = doc.DocumentNode.SelectNodes("//div[contains(@class, 'award_category')]")
-            ?? doc.DocumentNode.SelectNodes("//div[contains(@class, 'category')]")
-            ?? doc.DocumentNode.SelectNodes("//section[contains(@class, 'panel')]");
+        // TMDB ceremony pages use div elements with id="category-N" for each category
+        // Each contains an h4 header and nomination cards
+        var categorySections = doc.DocumentNode.SelectNodes("//div[starts-with(@id, 'category-')]");
 
         if (categorySections is null)
         {
             _logger.LogDebug(
-                "No category sections found via CSS class selectors for {Organization} {Year}, falling back to header-based parsing",
+                "No category-N sections found for {Organization} {Year}, trying h4 header fallback",
                 ceremony.OrganizationName,
                 ceremony.Year);
-            ParseCategoriesByHeaders(doc, ceremony);
+            ParseCategoriesByH4(doc, ceremony);
             return;
         }
 
@@ -93,10 +91,10 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
         }
     }
 
-    private void ParseCategoriesByHeaders(HtmlDocument doc, AwardCeremony ceremony)
+    private void ParseCategoriesByH4(HtmlDocument doc, AwardCeremony ceremony)
     {
-        // Alternative parsing strategy using header elements
-        var headers = doc.DocumentNode.SelectNodes("//h3") ?? doc.DocumentNode.SelectNodes("//h2");
+        // Fallback: find h4 headers and look for nomination cards in their parent containers
+        var headers = doc.DocumentNode.SelectNodes("//h4");
         if (headers is null)
         {
             _logger.LogWarning(
@@ -108,30 +106,21 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
 
         foreach (var header in headers)
         {
-            var categoryName = header.InnerText?.Trim();
+            var categoryName = HtmlEntity.DeEntitize(header.InnerText?.Trim() ?? string.Empty);
             if (string.IsNullOrEmpty(categoryName))
             {
                 continue;
             }
 
-            var category = new AwardCategory { Name = categoryName };
-
-            // Look for nomination items following this header
-            var nextSibling = header.NextSibling;
-            while (nextSibling is not null)
+            // Use the header's parent container to find nomination cards
+            var container = header.ParentNode;
+            if (container is null)
             {
-                if (nextSibling.Name == "h3" || nextSibling.Name == "h2")
-                {
-                    break;
-                }
-
-                if (nextSibling.NodeType == HtmlNodeType.Element)
-                {
-                    ParseNominationsFromNode(nextSibling, category);
-                }
-
-                nextSibling = nextSibling.NextSibling;
+                continue;
             }
+
+            var category = new AwardCategory { Name = categoryName };
+            ParseNominationCards(container, category);
 
             if (category.Nominations.Count > 0)
             {
@@ -142,12 +131,12 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
 
     private AwardCategory? ParseCategorySection(HtmlNode section, AwardCeremony ceremony)
     {
-        // Extract category name from header within section
-        var header = section.SelectSingleNode(".//h3")
-            ?? section.SelectSingleNode(".//h2")
-            ?? section.SelectSingleNode(".//*[contains(@class, 'title')]");
+        // Extract category name from h4 header within section
+        var header = section.SelectSingleNode(".//h4")
+            ?? section.SelectSingleNode(".//h3")
+            ?? section.SelectSingleNode(".//h2");
 
-        var categoryName = header?.InnerText?.Trim();
+        var categoryName = HtmlEntity.DeEntitize(header?.InnerText?.Trim() ?? string.Empty);
         if (string.IsNullOrEmpty(categoryName))
         {
             _logger.LogDebug(
@@ -159,37 +148,25 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
 
         var category = new AwardCategory { Name = categoryName };
 
-        // Find nomination items within this section
-        var nomineeNodes = section.SelectNodes(".//*[contains(@class, 'nominee')]")
-            ?? section.SelectNodes(".//li")
-            ?? section.SelectNodes(".//*[contains(@class, 'card')]");
-
-        if (nomineeNodes is not null)
-        {
-            foreach (var nomineeNode in nomineeNodes)
-            {
-                var nomination = ParseNomination(nomineeNode);
-                if (nomination is not null)
-                {
-                    category.Nominations.Add(nomination);
-                }
-            }
-        }
+        ParseNominationCards(section, category);
 
         return category;
     }
 
-    private void ParseNominationsFromNode(HtmlNode node, AwardCategory category)
+    private void ParseNominationCards(HtmlNode container, AwardCategory category)
     {
-        var items = node.SelectNodes(".//li") ?? node.SelectNodes(".//*[contains(@class, 'nominee')]");
-        if (items is null)
+        // TMDB uses div elements with class "comp:nomination-card" for each nomination
+        var cards = container.SelectNodes(".//*[contains(@class, 'comp:nomination-card')]");
+
+        if (cards is null)
         {
+            _logger.LogDebug("No nomination cards found in category '{Category}'", category.Name);
             return;
         }
 
-        foreach (var item in items)
+        foreach (var card in cards)
         {
-            var nomination = ParseNomination(item);
+            var nomination = ParseNominationCard(card);
             if (nomination is not null)
             {
                 category.Nominations.Add(nomination);
@@ -197,65 +174,63 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
         }
     }
 
-    private AwardNomination? ParseNomination(HtmlNode node)
+    private AwardNomination? ParseNominationCard(HtmlNode card)
     {
-        // Determine if this is a winner
-        var isWinner = node.GetAttributeValue("class", string.Empty).Contains("winner", StringComparison.OrdinalIgnoreCase)
-            || node.SelectSingleNode(".//*[contains(@class, 'winner')]") is not null
-            || node.SelectSingleNode(".//*[contains(@class, 'trophy')]") is not null;
+        // Determine winner/nominee status from the <bdi> text within the status badge
+        // Winners have <p class="status ... bg-accent-green ..."><bdi>Winner</bdi></p>
+        // Nominees have <p class="status ... bg-gray-500 ..."><bdi>Nominee</bdi></p>
+        var statusNode = card.SelectSingleNode(".//bdi");
+        var statusText = statusNode?.InnerText?.Trim() ?? string.Empty;
+        var isWinner = statusText.Equals("Winner", StringComparison.OrdinalIgnoreCase)
+            || card.GetAttributeValue("class", string.Empty).Contains("shadow-accent-green", StringComparison.OrdinalIgnoreCase);
 
-        // Extract movie link and TMDB ID
-        var movieLink = node.SelectSingleNode(".//a[contains(@href, '/movie/')]");
-        var personLink = node.SelectSingleNode(".//a[contains(@href, '/person/')]");
+        // Extract movie link - TMDB uses <a href="/movie/872585-oppenheimer">
+        var movieLink = card.SelectSingleNode(".//a[contains(@href, '/movie/')]");
 
-        // Get display name
-        var nameNode = movieLink ?? personLink ?? node.SelectSingleNode(".//*[contains(@class, 'name')]");
-        var name = nameNode?.InnerText?.Trim() ?? node.InnerText?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrEmpty(name))
+        if (movieLink is null)
         {
+            _logger.LogDebug("No movie link found in nomination card, skipping");
+            return null;
+        }
+
+        var movieHref = movieLink.GetAttributeValue("href", string.Empty);
+        var movieIdMatch = TmdbMovieIdRegex().Match(movieHref);
+        if (!movieIdMatch.Success)
+        {
+            _logger.LogDebug("Could not extract TMDB movie ID from href: {Href}", movieHref);
+            return null;
+        }
+
+        var tmdbMovieId = int.Parse(movieIdMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+
+        // Extract movie title from <h2><span>Title</span></h2> inside the card
+        var titleNode = card.SelectSingleNode(".//h2//span")
+            ?? card.SelectSingleNode(".//h2");
+        var movieTitle = HtmlEntity.DeEntitize(titleNode?.InnerText?.Trim() ?? string.Empty);
+
+        if (string.IsNullOrEmpty(movieTitle))
+        {
+            // Fallback: use the alt text from the poster image
+            var imgNode = card.SelectSingleNode(".//img[@alt]");
+            movieTitle = HtmlEntity.DeEntitize(imgNode?.GetAttributeValue("alt", string.Empty) ?? string.Empty);
+        }
+
+        if (string.IsNullOrEmpty(movieTitle))
+        {
+            _logger.LogDebug("No title found for nomination card with movie ID {MovieId}", tmdbMovieId);
             return null;
         }
 
         var nomination = new AwardNomination
         {
-            Name = HtmlEntity.DeEntitize(name) ?? name,
+            Name = movieTitle,
+            MovieTitle = movieTitle,
             Result = isWinner ? AwardResult.Winner : AwardResult.Nominee,
+            TmdbMovieId = tmdbMovieId,
         };
 
-        // Extract TMDB movie ID from URL
-        if (movieLink is not null)
-        {
-            var movieHref = movieLink.GetAttributeValue("href", string.Empty);
-            var movieIdMatch = TmdbMovieIdRegex().Match(movieHref);
-            if (movieIdMatch.Success)
-            {
-                nomination.TmdbMovieId = int.Parse(movieIdMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
-                nomination.MovieTitle = HtmlEntity.DeEntitize(movieLink.InnerText?.Trim() ?? string.Empty);
-                _logger.LogDebug(
-                    "Parsed nomination: '{Name}' (TMDB movie {MovieId}), Result={Result}",
-                    nomination.Name,
-                    nomination.TmdbMovieId,
-                    nomination.Result);
-            }
-            else
-            {
-                _logger.LogDebug(
-                    "Movie link found for '{Name}' but could not extract TMDB ID from href: {Href}",
-                    nomination.Name,
-                    movieHref);
-            }
-        }
-        else
-        {
-            _logger.LogDebug(
-                "No movie link found for nomination '{Name}' (Result={Result})",
-                nomination.Name,
-                nomination.Result);
-        }
-
-        // Extract TMDB person IDs
-        var personLinks = node.SelectNodes(".//a[contains(@href, '/person/')]");
+        // Extract TMDB person IDs from person links
+        var personLinks = card.SelectNodes(".//a[contains(@href, '/person/')]");
         if (personLinks is not null)
         {
             foreach (var pLink in personLinks)
@@ -270,20 +245,15 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
                         nomination.TmdbPersonIds.Add(personId);
                     }
                 }
-                else
-                {
-                    _logger.LogDebug(
-                        "Person link found for '{Name}' but could not extract TMDB person ID from href: {Href}",
-                        nomination.Name,
-                        personHref);
-                }
             }
-
-            _logger.LogDebug(
-                "Extracted {PersonCount} person IDs for nomination '{Name}'",
-                nomination.TmdbPersonIds.Count,
-                nomination.Name);
         }
+
+        _logger.LogDebug(
+            "Parsed nomination: '{Title}' (TMDB movie {MovieId}), Result={Result}, Persons={PersonCount}",
+            nomination.Name,
+            nomination.TmdbMovieId,
+            nomination.Result,
+            nomination.TmdbPersonIds.Count);
 
         return nomination;
     }
