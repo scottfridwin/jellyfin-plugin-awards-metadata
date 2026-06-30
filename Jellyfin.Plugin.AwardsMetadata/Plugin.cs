@@ -1,4 +1,3 @@
-using System.Reflection;
 using Jellyfin.Plugin.AwardsMetadata.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;

@@ -82,7 +82,7 @@ public class AwardsMetadataController : ControllerBase
         };
 
         using var httpClient = _httpClientFactory.CreateClient(nameof(AwardsMetadataController));
-        var downloader = new HttpHtmlDownloader(
+        using var downloader = new HttpHtmlDownloader(
             httpClient,
             scraperOptions,
             _loggerFactory.CreateLogger<HttpHtmlDownloader>());

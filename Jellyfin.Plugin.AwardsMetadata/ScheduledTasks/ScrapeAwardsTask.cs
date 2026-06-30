@@ -102,7 +102,7 @@ public sealed class ScrapeAwardsTask : IScheduledTask
         };
 
         using var httpClient = _httpClientFactory.CreateClient(nameof(ScrapeAwardsTask));
-        var downloader = new HttpHtmlDownloader(
+        using var downloader = new HttpHtmlDownloader(
             httpClient,
             scraperOptions,
             _loggerFactory.CreateLogger<HttpHtmlDownloader>());

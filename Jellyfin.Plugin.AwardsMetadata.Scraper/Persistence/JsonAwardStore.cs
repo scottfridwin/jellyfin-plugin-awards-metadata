@@ -50,15 +50,28 @@ public sealed class JsonAwardStore : IAwardStore
         var json = JsonSerializer.Serialize(database, SerializerOptions);
         _logger.LogDebug("Awards database serialized ({Size} characters), writing to {Path}", json.Length, _filePath);
 
+        var tempPath = _filePath + ".tmp";
         try
         {
             // Atomic write: write to temp file, then rename to prevent corruption on crash
-            var tempPath = _filePath + ".tmp";
             await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
             File.Move(tempPath, _filePath, overwrite: true);
         }
         catch (Exception ex)
         {
+            // Clean up temp file if it was created but move failed
+            try
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch (IOException)
+            {
+                // Best effort cleanup
+            }
+
             _logger.LogError(ex, "Failed to write awards database to {Path}", _filePath);
             throw;
         }

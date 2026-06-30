@@ -73,12 +73,12 @@ public sealed class JsonManagedTagStore : IManagedTagStore
         var totalTags = _managedTags.Values.Sum(v => v.Count);
         _logger.LogDebug("Saving managed tags: {Items} items, {Tags} total tags to {Path}", _managedTags.Count, totalTags, _filePath);
 
+        var tempPath = _filePath + ".tmp";
         try
         {
             var json = JsonSerializer.Serialize(data, SerializerOptions);
 
             // Atomic write: write to temp file, then rename to prevent corruption on crash
-            var tempPath = _filePath + ".tmp";
             await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
             File.Move(tempPath, _filePath, overwrite: true);
 
@@ -86,6 +86,19 @@ public sealed class JsonManagedTagStore : IManagedTagStore
         }
         catch (Exception ex)
         {
+            // Clean up temp file if it was created but move failed
+            try
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch (IOException)
+            {
+                // Best effort cleanup
+            }
+
             _logger.LogError(ex, "Failed to save managed tags to {Path}", _filePath);
             throw;
         }
