@@ -11,7 +11,7 @@ Automatically tag movies in your [Jellyfin](https://jellyfin.org/) library with 
 - **Safe updates** — changing tag format or configuration cleanly removes old tags and applies new ones
 - **Rate limiting & retries** — respects TMDB rate limits with configurable delays, exponential backoff, and Retry-After support
 - **Idempotent operations** — running any task multiple times produces identical results without duplicates
-- **Scheduled tasks** — scrape data, apply tags, and remove stale tags on configurable schedules
+- **Scheduled tasks** — scrape data, apply tags, and remove existing tags on configurable schedules
 - **Extensible architecture** — scraper library is decoupled from the plugin, enabling future providers and storage backends
 
 ## How It Works
@@ -104,7 +104,7 @@ After initial setup, both tasks run automatically on schedule.
 |------|-------------|-----------------|
 | **Scrape Awards Data** | Downloads and parses award data from TMDB for enabled organizations | Weekly (Sunday 3:00 AM) |
 | **Apply Award Tags** | Matches library movies by TMDB ID and applies/updates tags | Daily (4:00 AM) |
-| **Remove Stale Award Tags** | Removes all managed tags (useful for cleanup or reconfiguration) | Manual only |
+| **Remove Existing Award Tags** | Removes all managed tags (useful for cleanup or reconfiguration) | Manual only |
 
 ## Architecture
 
