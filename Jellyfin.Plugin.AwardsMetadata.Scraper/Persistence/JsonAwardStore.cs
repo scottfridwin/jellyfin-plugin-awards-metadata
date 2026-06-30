@@ -40,19 +40,33 @@ public sealed class JsonAwardStore : IAwardStore
         var directory = Path.GetDirectoryName(_filePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
+            _logger.LogDebug("Creating awards database directory: {Directory}", directory);
             Directory.CreateDirectory(directory);
         }
 
         database.GeneratedUtc = DateTimeOffset.UtcNow;
 
+        _logger.LogDebug("Serializing awards database to JSON");
         var json = JsonSerializer.Serialize(database, SerializerOptions);
-        await File.WriteAllTextAsync(_filePath, json, cancellationToken).ConfigureAwait(false);
+        _logger.LogDebug("Awards database serialized ({Size} characters), writing to {Path}", json.Length, _filePath);
 
+        try
+        {
+            await File.WriteAllTextAsync(_filePath, json, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write awards database to {Path}", _filePath);
+            throw;
+        }
+
+        var totalNominations = database.Ceremonies.Sum(c => c.Categories.Sum(cat => cat.Nominations.Count));
         _logger.LogInformation(
-            "Awards database saved to {Path} ({Organizations} organizations, {Ceremonies} ceremonies)",
+            "Awards database saved to {Path} ({Organizations} organizations, {Ceremonies} ceremonies, {Nominations} nominations)",
             _filePath,
             database.Organizations.Count,
-            database.Ceremonies.Count);
+            database.Ceremonies.Count,
+            totalNominations);
     }
 
     /// <inheritdoc />
@@ -64,16 +78,35 @@ public sealed class JsonAwardStore : IAwardStore
             return null;
         }
 
+        _logger.LogDebug("Reading awards database file ({Size} bytes)", new FileInfo(_filePath).Length);
         var json = await File.ReadAllTextAsync(_filePath, cancellationToken).ConfigureAwait(false);
-        var database = JsonSerializer.Deserialize<AwardsDatabase>(json, SerializerOptions);
+
+        AwardsDatabase? database;
+        try
+        {
+            database = JsonSerializer.Deserialize<AwardsDatabase>(json, SerializerOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize awards database from {Path}. The file may be corrupt", _filePath);
+            return null;
+        }
 
         if (database is not null)
         {
+            var totalNominations = database.Ceremonies.Sum(c => c.Categories.Sum(cat => cat.Nominations.Count));
             _logger.LogInformation(
-                "Awards database loaded from {Path} (schema v{Version}, generated {Timestamp})",
+                "Awards database loaded from {Path} (schema v{Version}, generated {Timestamp}, {Organizations} organizations, {Ceremonies} ceremonies, {Nominations} nominations)",
                 _filePath,
                 database.SchemaVersion,
-                database.GeneratedUtc);
+                database.GeneratedUtc,
+                database.Organizations.Count,
+                database.Ceremonies.Count,
+                totalNominations);
+        }
+        else
+        {
+            _logger.LogWarning("Awards database deserialized as null from {Path}", _filePath);
         }
 
         return database;

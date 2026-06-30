@@ -10,5 +10,7 @@ category: "Metadata"
 owner: "scott.fridlund"
 artifacts:
   - "Jellyfin.Plugin.AwardsMetadata.dll"
+  - "Jellyfin.Plugin.AwardsMetadata.Scraper.dll"
+  - "HtmlAgilityPack.dll"
 changelog: >
   1.0.0.0: Initial release

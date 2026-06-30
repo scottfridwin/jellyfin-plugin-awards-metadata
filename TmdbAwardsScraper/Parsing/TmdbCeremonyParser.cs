@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
-using Jellyfin.Plugin.AwardsMetadata.Scraper.Models;
+using TmdbAwardsScraper.Models;
 
-namespace Jellyfin.Plugin.AwardsMetadata.Scraper.Parsing;
+namespace TmdbAwardsScraper.Parsing;
 
 /// <summary>
 /// Parses a TMDB ceremony page into structured award categories and nominations.
@@ -65,19 +65,10 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
 
         if (categorySections is null)
         {
-            _logger.LogDebug(
-                "No category sections found via CSS class selectors for {Organization} {Year}, falling back to header-based parsing",
-                ceremony.OrganizationName,
-                ceremony.Year);
+            // Fallback: try to find h3 headers that denote categories
             ParseCategoriesByHeaders(doc, ceremony);
             return;
         }
-
-        _logger.LogDebug(
-            "Found {Count} category sections for {Organization} {Year}",
-            categorySections.Count,
-            ceremony.OrganizationName,
-            ceremony.Year);
 
         foreach (var section in categorySections)
         {
@@ -85,10 +76,6 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
             if (category is not null && category.Nominations.Count > 0)
             {
                 ceremony.Categories.Add(category);
-                _logger.LogDebug(
-                    "Parsed category '{Category}': {NominationCount} nominations",
-                    category.Name,
-                    category.Nominations.Count);
             }
         }
     }
@@ -232,26 +219,7 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
             {
                 nomination.TmdbMovieId = int.Parse(movieIdMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
                 nomination.MovieTitle = HtmlEntity.DeEntitize(movieLink.InnerText?.Trim() ?? string.Empty);
-                _logger.LogDebug(
-                    "Parsed nomination: '{Name}' (TMDB movie {MovieId}), Result={Result}",
-                    nomination.Name,
-                    nomination.TmdbMovieId,
-                    nomination.Result);
             }
-            else
-            {
-                _logger.LogDebug(
-                    "Movie link found for '{Name}' but could not extract TMDB ID from href: {Href}",
-                    nomination.Name,
-                    movieHref);
-            }
-        }
-        else
-        {
-            _logger.LogDebug(
-                "No movie link found for nomination '{Name}' (Result={Result})",
-                nomination.Name,
-                nomination.Result);
         }
 
         // Extract TMDB person IDs
@@ -270,19 +238,7 @@ public sealed partial class TmdbCeremonyParser : ICeremonyParser
                         nomination.TmdbPersonIds.Add(personId);
                     }
                 }
-                else
-                {
-                    _logger.LogDebug(
-                        "Person link found for '{Name}' but could not extract TMDB person ID from href: {Href}",
-                        nomination.Name,
-                        personHref);
-                }
             }
-
-            _logger.LogDebug(
-                "Extracted {PersonCount} person IDs for nomination '{Name}'",
-                nomination.TmdbPersonIds.Count,
-                nomination.Name);
         }
 
         return nomination;

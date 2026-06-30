@@ -71,6 +71,14 @@ public sealed class ScrapeAwardsTask : IScheduledTask
             return;
         }
 
+        _logger.LogDebug(
+            "Scrape configuration: BaseUrl={BaseUrl}, RateLimitDelayMs={RateLimit}, MaxRetryCount={MaxRetry}, RequestTimeoutSeconds={Timeout}, Organizations=[{Organizations}]",
+            config.TmdbBaseUrl,
+            config.RateLimitDelayMs,
+            config.MaxRetryCount,
+            config.RequestTimeoutSeconds,
+            string.Join(", ", config.EnabledOrganizations));
+
         var scraperOptions = new ScraperOptions
         {
             BaseUrl = config.TmdbBaseUrl,
@@ -108,20 +116,38 @@ public sealed class ScrapeAwardsTask : IScheduledTask
 
         _logger.LogInformation("Starting awards scrape for {Count} organizations", config.EnabledOrganizations.Count);
 
-        var database = await scraper.ScrapeAsync(scrapeOptions, scrapeProgress, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var database = await scraper.ScrapeAsync(scrapeOptions, scrapeProgress, cancellationToken).ConfigureAwait(false);
 
-        // Persist the database
-        var store = new JsonAwardStore(
-            plugin.GetAwardsDatabasePath(),
-            _loggerFactory.CreateLogger<JsonAwardStore>());
+            // Persist the database
+            var dbPath = plugin.GetAwardsDatabasePath();
+            _logger.LogDebug("Saving awards database to {Path}", dbPath);
+            var store = new JsonAwardStore(
+                dbPath,
+                _loggerFactory.CreateLogger<JsonAwardStore>());
 
-        await store.SaveAsync(database, cancellationToken).ConfigureAwait(false);
+            await store.SaveAsync(database, cancellationToken).ConfigureAwait(false);
 
-        var totalNominations = database.Ceremonies.Sum(c => c.Categories.Sum(cat => cat.Nominations.Count));
-        _logger.LogInformation(
-            "Awards scrape complete: {Ceremonies} ceremonies, {Nominations} nominations saved",
-            database.Ceremonies.Count,
-            totalNominations);
+            var totalNominations = database.Ceremonies.Sum(c => c.Categories.Sum(cat => cat.Nominations.Count));
+            var totalWinners = database.Ceremonies.Sum(c => c.Categories.Sum(cat => cat.Nominations.Count(n => n.Result == Jellyfin.Plugin.AwardsMetadata.Scraper.Models.AwardResult.Winner)));
+            _logger.LogInformation(
+                "Awards scrape complete: {Ceremonies} ceremonies, {Nominations} nominations ({Winners} winners) saved to {Path}",
+                database.Ceremonies.Count,
+                totalNominations,
+                totalWinners,
+                dbPath);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Awards scrape was cancelled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Awards scrape failed");
+            throw;
+        }
 
         progress.Report(100);
     }

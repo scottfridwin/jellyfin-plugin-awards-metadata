@@ -13,6 +13,7 @@ namespace Jellyfin.Plugin.AwardsMetadata.ScheduledTasks;
 public sealed class RemoveStaleManagedTagsTask : IScheduledTask
 {
     private readonly ILibraryManager _libraryManager;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<RemoveStaleManagedTagsTask> _logger;
 
     /// <summary>
@@ -23,6 +24,7 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
     public RemoveStaleManagedTagsTask(ILibraryManager libraryManager, ILoggerFactory loggerFactory)
     {
         _libraryManager = libraryManager;
+        _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<RemoveStaleManagedTagsTask>();
     }
 
@@ -54,7 +56,11 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
             return;
         }
 
-        var managedTagStore = new TagGeneration.JsonManagedTagStore(plugin.GetManagedTagsPath());
+        var managedTagsPath = plugin.GetManagedTagsPath();
+        _logger.LogDebug("Loading managed tags from {Path}", managedTagsPath);
+        var managedTagStore = new TagGeneration.JsonManagedTagStore(
+            managedTagsPath,
+            _loggerFactory.CreateLogger<TagGeneration.JsonManagedTagStore>());
         await managedTagStore.LoadAsync(cancellationToken).ConfigureAwait(false);
 
         var trackedItems = managedTagStore.GetAllTrackedItemIds();
@@ -80,7 +86,7 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
             var item = _libraryManager.GetItemById(itemId);
             if (item is null)
             {
-                // Item no longer exists, clean up tracking
+                _logger.LogDebug("Item {ItemId} no longer exists in library, cleaning up managed tag tracking", itemId);
                 managedTagStore.RemoveManagedTags(itemId);
                 continue;
             }
@@ -108,6 +114,11 @@ public sealed class RemoveStaleManagedTagsTask : IScheduledTask
                 item.Tags = [.. currentTags];
                 await _libraryManager.UpdateItemAsync(item, item.GetParent()!, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 itemsUpdated++;
+                _logger.LogDebug(
+                    "Removed {TagCount} stale tags from '{ItemName}' ({ItemId})",
+                    managedTags.Count,
+                    item.Name,
+                    itemId);
             }
 
             managedTagStore.RemoveManagedTags(itemId);

@@ -46,10 +46,17 @@ public class AwardsMetadataController : ControllerBase
         var plugin = Plugin.Instance;
         if (plugin is null)
         {
+            _logger.LogError("DiscoverOrganizations called but Plugin.Instance is null. The plugin may not have been initialized");
             return StatusCode(StatusCodes.Status500InternalServerError, "Plugin not initialized");
         }
 
         var config = plugin.Configuration;
+        _logger.LogDebug(
+            "DiscoverOrganizations: BaseUrl={BaseUrl}, RateLimitDelayMs={RateLimit}, MaxRetryCount={MaxRetry}, RequestTimeoutSeconds={Timeout}",
+            config.TmdbBaseUrl,
+            config.RateLimitDelayMs,
+            config.MaxRetryCount,
+            config.RequestTimeoutSeconds);
 
         var scraperOptions = new ScraperOptions
         {

@@ -68,27 +68,45 @@ public sealed class ApplyTagsTask : IScheduledTask
         }
 
         var config = plugin.Configuration;
+        _logger.LogDebug(
+            "ApplyTags configuration: TagFormat={TagFormat}, EnableWinnerTagging={Winners}, EnableNomineeTagging={Nominees}, EnabledOrganizations={Organizations}",
+            config.TagFormat,
+            config.EnableWinnerTagging,
+            config.EnableNomineeTagging,
+            string.Join(", ", config.EnabledOrganizations));
+
         var normalizer = new SlugTextNormalizer();
         var tagGenerator = new TagGeneration.TagGenerator(config.TagFormat, normalizer);
 
         // Load awards database
+        var dbPath = plugin.GetAwardsDatabasePath();
+        _logger.LogDebug("Loading awards database from {Path}", dbPath);
         var store = new JsonAwardStore(
-            plugin.GetAwardsDatabasePath(),
+            dbPath,
             _loggerFactory.CreateLogger<JsonAwardStore>());
 
         var database = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
         if (database is null)
         {
-            _logger.LogWarning("No awards database found. Run the scrape task first.");
+            _logger.LogWarning("No awards database found at {Path}. Run the scrape task first", dbPath);
             return;
         }
 
+        _logger.LogDebug(
+            "Awards database loaded: {Organizations} organizations, {Ceremonies} ceremonies, schema v{Version}",
+            database.Organizations.Count,
+            database.Ceremonies.Count,
+            database.SchemaVersion);
+
         // Load managed tag store
-        var managedTagStore = new TagGeneration.JsonManagedTagStore(plugin.GetManagedTagsPath());
+        var managedTagStore = new TagGeneration.JsonManagedTagStore(
+            plugin.GetManagedTagsPath(),
+            _loggerFactory.CreateLogger<TagGeneration.JsonManagedTagStore>());
         await managedTagStore.LoadAsync(cancellationToken).ConfigureAwait(false);
 
         // Build a lookup of TMDB movie ID -> nominations
         var movieNominations = BuildMovieNominationLookup(database, config);
+        _logger.LogDebug("Built nomination lookup: {MovieCount} movies with nominations", movieNominations.Count);
 
         if (movieNominations.Count == 0)
         {
@@ -108,6 +126,8 @@ public sealed class ApplyTagsTask : IScheduledTask
 
         var tagsApplied = 0;
         var moviesUpdated = 0;
+        var moviesSkippedNoTmdb = 0;
+        var moviesSkippedNoNominations = 0;
 
         for (var i = 0; i < movies.Count; i++)
         {
@@ -118,13 +138,21 @@ public sealed class ApplyTagsTask : IScheduledTask
             var tmdbId = GetTmdbId(movie);
             if (tmdbId is null)
             {
+                moviesSkippedNoTmdb++;
                 continue;
             }
 
             if (!movieNominations.TryGetValue(tmdbId.Value, out var nominations))
             {
+                moviesSkippedNoNominations++;
                 continue;
             }
+
+            _logger.LogDebug(
+                "Processing movie '{MovieName}' (TMDB {TmdbId}): {NominationCount} nominations",
+                movie.Name,
+                tmdbId.Value,
+                nominations.Count);
 
             // Generate tags for this movie
             var newTags = new HashSet<string>(StringComparer.Ordinal);
@@ -169,6 +197,11 @@ public sealed class ApplyTagsTask : IScheduledTask
                 movie.Tags = [.. currentTags];
                 await _libraryManager.UpdateItemAsync(movie, movie.GetParent()!, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 moviesUpdated++;
+                _logger.LogDebug(
+                    "Updated tags for '{MovieName}' (TMDB {TmdbId}): {TagCount} managed tags",
+                    movie.Name,
+                    tmdbId.Value,
+                    newTags.Count);
             }
         }
 
@@ -176,9 +209,11 @@ public sealed class ApplyTagsTask : IScheduledTask
         await managedTagStore.SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Tag application complete: {TagsApplied} tags applied to {MoviesUpdated} movies",
+            "Tag application complete: {TagsApplied} tags applied to {MoviesUpdated} movies (skipped: {NoTmdb} without TMDB ID, {NoNominations} without nominations)",
             tagsApplied,
-            moviesUpdated);
+            moviesUpdated,
+            moviesSkippedNoTmdb,
+            moviesSkippedNoNominations);
 
         progress.Report(100);
     }

@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.AwardsMetadata.TagGeneration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Jellyfin.Plugin.AwardsMetadata.Tests;
@@ -13,7 +14,7 @@ public class ManagedTagStoreTests : IDisposable
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "managed-tags-tests-" + Guid.NewGuid().ToString("N"));
         _tempFile = Path.Combine(_tempDir, "managed-tags.json");
-        _store = new JsonManagedTagStore(_tempFile);
+        _store = new JsonManagedTagStore(_tempFile, NullLogger<JsonManagedTagStore>.Instance);
     }
 
     public void Dispose()
@@ -95,7 +96,7 @@ public class ManagedTagStoreTests : IDisposable
 
         await _store.SaveAsync();
 
-        var newStore = new JsonManagedTagStore(_tempFile);
+        var newStore = new JsonManagedTagStore(_tempFile, NullLogger<JsonManagedTagStore>.Instance);
         await newStore.LoadAsync();
 
         var tags = newStore.GetManagedTags(itemId);
@@ -108,7 +109,7 @@ public class ManagedTagStoreTests : IDisposable
     public async Task Load_WhenFileDoesNotExist_InitializesEmpty()
     {
         var nonExistentFile = Path.Combine(_tempDir, "nonexistent.json");
-        var store = new JsonManagedTagStore(nonExistentFile);
+        var store = new JsonManagedTagStore(nonExistentFile, NullLogger<JsonManagedTagStore>.Instance);
 
         await store.LoadAsync();
 
