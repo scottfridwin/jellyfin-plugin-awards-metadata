@@ -1,0 +1,20 @@
+[
+  {
+    "category": "Metadata",
+    "description": "Adds custom award metadata tags to media items in Jellyfin.",
+    "guid": "38895a18-37d8-4a0a-92f8-c38335820627",
+    "name": "Awards Metadata",
+    "overview": "Apply custom award metadata tags",
+    "owner": "scottfridwin",
+    "versions": [
+      {
+        "version": "0.0.1",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/releases/download/v0.0.1/Jellyfin.Plugin.AwardsMetadata-0.0.1.zip",
+        "checksum": "1c402b66e265d63fbe34d2ef47e323b7",
+        "timestamp": "2026-06-30T01:27:18Z",
+        "changelog": "Release 0.0.1"
+      }
+    ]
+  }
+]
