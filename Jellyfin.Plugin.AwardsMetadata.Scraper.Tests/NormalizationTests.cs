@@ -20,6 +20,8 @@ public class NormalizationTests
     [InlineData("BAFTA Awards", "bafta-awards")]
     [InlineData("Screen Actors Guild Awards", "screen-actors-guild-awards")]
     [InlineData("Best Actor in a Leading Role", "best-actor-in-a-leading-role")]
+    [InlineData("Critics' Choice Television Awards", "critics-choice-television-awards")]
+    [InlineData("BMI Film, TV & Visual Media Awards", "bmi-film-tv-visual-media-awards")]
     public void Normalize_ProducesExpectedSlugs(string input, string expected)
     {
         var result = _normalizer.Normalize(input);
