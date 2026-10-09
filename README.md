@@ -1,173 +1,111 @@
-# Jellyfin Plugin: Awards Metadata
+# Awards Metadata for Jellyfin
 
-Automatically tag movies in your [Jellyfin](https://jellyfin.org/) library with award nominations and wins scraped from [TMDB](https://www.themoviedb.org/).
+[![Build](https://img.shields.io/github/actions/workflow/status/scottfridwin/jellyfin-plugin-awards-metadata/build.yaml?branch=main&label=build)](https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/actions/workflows/build.yaml)
+[![Release](https://img.shields.io/github/v/release/scottfridwin/jellyfin-plugin-awards-metadata)](https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/releases/latest)
+[![Jellyfin](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fscottfridwin%2Fjellyfin-plugin-awards-metadata%2Fmain%2Fbuild.yaml&query=%24.targetAbi&label=Jellyfin&logo=jellyfin&color=00a4dc)](https://jellyfin.org/)
+[![Downloads](https://img.shields.io/github/downloads/scottfridwin/jellyfin-plugin-awards-metadata/total)](https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/releases)
+[![License](https://img.shields.io/github/license/scottfridwin/jellyfin-plugin-awards-metadata)](LICENSE)
+
+Tag the movies in your [Jellyfin](https://jellyfin.org/) library with the awards they won or were nominated for, such as `award-academy-awards-winner-best-picture-2014`. Award data comes from the public award pages on [TMDB](https://www.themoviedb.org/award); no API key is needed.
+
+> [!NOTE]
+> **AI disclosure:** This project is built and maintained with substantial help from AI coding assistants (GitHub Copilot and Claude). AI is used to write and modify the code, tests, documentation and CI configuration, and to manage the repository. Dependency updates are merged and released automatically, without human review, when the automated tests pass. Review the code and test it in your own environment before relying on it.
 
 ## Features
 
-- **Award discovery** — dynamically discovers all award organizations available on TMDB (Academy Awards, Golden Globes, BAFTA, etc.)
-- **Full ceremony scraping** — downloads and parses complete ceremony data including categories, nominees, and winners
-- **Configurable tagging** — apply tags for winners, nominees, or both using a customizable tag format
-- **Managed tags** — only modifies tags it owns; never touches user-created tags
-- **Safe updates** — changing tag format or configuration cleanly removes old tags and applies new ones
-- **Rate limiting & retries** — respects TMDB rate limits with configurable delays, exponential backoff, and Retry-After support
-- **Idempotent operations** — running any task multiple times produces identical results without duplicates
-- **Scheduled tasks** — scrape data, apply tags, and remove existing tags on configurable schedules
-- **Extensible architecture** — scraper library is decoupled from the plugin, enabling future providers and storage backends
+- **Any award TMDB lists** — Academy Awards, Golden Globes, BAFTA, Cannes and many more; pick the ones you want
+- **Winners and nominees**, each optional
+- **Your tag format** — build tags from the organization, result, category and year
+- **Leaves your own tags alone** — the plugin only changes tags it created, and cleans them up when the format or selection changes
+- **Runs on a schedule** — refreshes award data weekly and tags new movies daily
+- **Polite scraping** — rate limiting, retries and back-off when talking to TMDB
 
-## How It Works
+## Requirements
 
-1. **Discover** — Query TMDB for available award organizations
-2. **Configure** — Select which organizations to track in the plugin settings
-3. **Scrape** — Download and parse ceremony pages into a local awards database
-4. **Apply** — Match movies in your library by TMDB ID and apply tag metadata
-
-### Tag Format
-
-Tags are generated using a configurable template with placeholders:
-
-| Placeholder | Description | Example |
-|-------------|-------------|---------|
-| `{awardType}` | Organization name (slugified) | `academy-awards` |
-| `{awardResult}` | Win or nomination | `winner` / `nominee` |
-| `{awardCategory}` | Category name (slugified) | `best-picture` |
-| `{awardYear}` | Ceremony year | `2024` |
-
-**Default format:** `award-{awardType}-{awardResult}-{awardCategory}-{awardYear}`
-
-**Example tags:**
-- `award-academy-awards-winner-best-picture-2024`
-- `award-golden-globes-nominee-best-director-2023`
-
-**Simplified format:** `{awardType}-{awardResult}` → `academy-awards-winner`
+- Jellyfin — the badge above shows the version the latest release targets; the plugin catalog automatically offers the newest release that is compatible with your server
+- Movies identified with a TMDB ID (Jellyfin's default metadata providers set this)
 
 ## Installation
 
-### Plugin Repository (Recommended)
+1. In Jellyfin, open **Dashboard → Plugins → Repositories** and add:
 
-1. Go to **Dashboard → Plugins → Repositories**
-2. Click **+** to add a new repository
-3. Enter the repository URL:
-   ```
+   ```text
    https://scottfridwin.github.io/jellyfin-plugin-awards-metadata/manifest.json
    ```
-4. Go to **Dashboard → Plugins → Catalog**
-5. Search for **Awards Metadata** and click **Install**
-6. Restart Jellyfin
 
-> **Dev/testing builds:** To test pre-release builds, use this repository URL instead:
-> ```
-> https://scottfridwin.github.io/jellyfin-plugin-awards-metadata/dev/manifest.json
-> ```
-> Dev builds are updated on every push to the `dev` branch and may be unstable.
+2. Open **Dashboard → Plugins → Catalog**, install **Awards Metadata**, and restart Jellyfin.
 
-### Manual Installation
+<details>
+<summary>Manual installation</summary>
 
-1. Download the latest release from [GitHub Releases](https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/releases)
-2. Extract the zip file into your Jellyfin plugins directory:
-   ```
-   <jellyfin-data>/plugins/Jellyfin.Plugin.AwardsMetadata/
-   ```
-   The folder should contain:
-   - `Jellyfin.Plugin.AwardsMetadata.dll`
-   - `Jellyfin.Plugin.AwardsMetadata.Scraper.dll`
-   - `HtmlAgilityPack.dll`
-3. Restart Jellyfin
+Download the zip for your Jellyfin version from [Releases](https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/releases), extract it to `<jellyfin-data>/plugins/Jellyfin.Plugin.AwardsMetadata/`, and restart Jellyfin. The repository method above is preferred because Jellyfin then installs updates for you.
+
+</details>
+
+## Getting started
+
+1. Open **Dashboard → Plugins → Awards Metadata**.
+2. Click **Discover Organizations** to load the list of awards from TMDB.
+3. Tick the organizations you want (for example *Academy Awards* and *Golden Globes*) and click **Save**.
+4. Open **Dashboard → Scheduled Tasks** and run **Scrape Awards Data**, then **Apply Award Tags**.
+
+The tags appear on your movies and can be used anywhere Jellyfin supports tags, for example the **Tags** filter in a movie library or tag rules in collection and playlist plugins. After the first run, both tasks keep things up to date on their own.
 
 ## Configuration
 
-After installation, go to **Dashboard → Plugins → Awards Metadata** and configure:
-
 | Setting | Description | Default |
-|---------|-------------|---------|
-| **Rate Limit Delay (ms)** | Minimum delay between HTTP requests to TMDB | `1000` |
-| **Max Retry Count** | Maximum retry attempts for failed requests | `3` |
-| **Request Timeout (s)** | HTTP request timeout | `30` |
-| **Enable Winner Tagging** | Generate tags for award winners | `true` |
-| **Enable Nominee Tagging** | Generate tags for nominees (non-winners) | `true` |
-| **Tag Format** | Template for generated tag strings | `award-{awardType}-{awardResult}-{awardCategory}-{awardYear}` |
+| --- | --- | --- |
+| Rate Limit Delay (ms) | Pause between requests to TMDB (100–60000) | `1000` |
+| Max Retry Count | Retries for a failed request (0–10) | `3` |
+| Request Timeout (seconds) | Timeout for each request (5–120) | `30` |
+| Enable Winner Tagging | Tag movies that won | on |
+| Enable Nominee Tagging | Tag movies that were nominated but did not win | on |
+| Tag Format | Template for each tag (see below) | `award-{awardType}-{awardResult}-{awardCategory}-{awardYear}` |
+| Award Organizations | Which awards to scrape and tag | *none* |
 
-### Getting Started
+### Tag format
 
-1. Install the plugin and restart Jellyfin
-2. Go to **Dashboard → Plugins → Awards Metadata**
-3. Click **Discover Organizations** to query TMDB for available award types
-4. Check the organizations you want to track (e.g., Academy Awards, Golden Globes)
-5. Click **Save**
-6. Run the **Scrape Awards Data** scheduled task (Dashboard → Scheduled Tasks)
-7. Run the **Apply Award Tags** scheduled task
+| Placeholder | Value | Example |
+| --- | --- | --- |
+| `{awardType}` | Organization | `academy-awards` |
+| `{awardResult}` | `winner` or `nominee` | `winner` |
+| `{awardCategory}` | Category | `best-picture` |
+| `{awardYear}` | Ceremony year | `2014` |
 
-After initial setup, both tasks run automatically on schedule.
+Names are lower-cased, accents are removed, and anything other than letters and digits becomes a hyphen.
 
-## Scheduled Tasks
+| Format | Example tag |
+| --- | --- |
+| `award-{awardType}-{awardResult}-{awardCategory}-{awardYear}` (default) | `award-academy-awards-winner-best-picture-2014` |
+| `{awardType}-{awardResult}` | `academy-awards-winner` |
+| `{awardType}-{awardYear}` | `golden-globes-2023` |
 
-| Task | Description | Default Schedule |
-|------|-------------|-----------------|
-| **Scrape Awards Data** | Downloads and parses award data from TMDB for enabled organizations | Weekly (Sunday 3:00 AM) |
-| **Apply Award Tags** | Matches library movies by TMDB ID and applies/updates tags | Daily (4:00 AM) |
-| **Remove Existing Award Tags** | Removes all managed tags (useful for cleanup or reconfiguration) | Manual only |
+Duplicate tags are merged, so short formats give one tag per movie rather than one per category.
 
-## Architecture
+## Scheduled tasks
 
-The solution is split into two projects:
+| Task | What it does | Default schedule |
+| --- | --- | --- |
+| Scrape Awards Data | Downloads award results from TMDB for the selected organizations | Sundays at 3:00 |
+| Apply Award Tags | Adds, updates and removes award tags on your movies | Daily at 4:00 |
+| Remove Existing Award Tags | Removes every tag this plugin has added | Manual |
 
-```
-Jellyfin.Plugin.AwardsMetadata         → Jellyfin plugin (config, tasks, API, tag generation)
-Jellyfin.Plugin.AwardsMetadata.Scraper → Reusable library (downloading, parsing, persistence)
-```
-
-The scraper library has no dependency on Jellyfin and owns the canonical awards data model:
-
-```
-Downloader → HTML → Parser → Award Models → Persistence → Consumer
-```
-
-Each component is individually testable with saved HTML fixtures.
-
-## Development
-
-### Prerequisites
-
-- .NET 9.0 SDK
-
-### Build
-
-```bash
-dotnet build
-```
-
-### Test
-
-```bash
-dotnet test
-```
-
-### Publish (plugin DLLs only)
-
-```bash
-dotnet publish Jellyfin.Plugin.AwardsMetadata -c Release -o artifacts
-```
-
-### Dev Container
-
-Open in VS Code with the Dev Containers extension for a pre-configured development environment.
+To remove the tags for good, untick the organizations (or disable winner and nominee tagging) before running **Remove Existing Award Tags**; otherwise the next **Apply Award Tags** run adds them back.
 
 ## Troubleshooting
 
-### No tags are being applied
+| Symptom | What to check |
+| --- | --- |
+| No tags are applied | At least one organization is selected and saved; **Scrape Awards Data** completed (see **Dashboard → Logs**); the movie has a TMDB ID. |
+| Tags disappeared after changing settings | Expected: old tags are removed and new ones are added on the next **Apply Award Tags** run. |
+| Scrape fails with timeouts | Increase **Request Timeout**. If TMDB is throttling requests, also increase **Rate Limit Delay**. |
+| An award or category is missing | The plugin can only tag what TMDB lists; check the organization's page on [TMDB](https://www.themoviedb.org/award). |
 
-1. Check that you've run **Discover Organizations** and selected at least one organization
-2. Verify the **Scrape Awards Data** task has completed successfully (check Dashboard → Logs)
-3. Confirm your movies have TMDB provider IDs (movies without TMDB IDs are skipped)
-4. Enable Debug logging to see per-movie processing details
+## Further reading
 
-### Tags disappeared after a configuration change
-
-This is expected behavior. When the tag format changes, old managed tags are removed and new ones are applied on the next **Apply Award Tags** run.
-
-### Scrape fails with timeout errors
-
-Increase the **Request Timeout** setting and reduce the **Rate Limit Delay** if your connection to TMDB is slow.
+- [How it works](docs/how-it-works.md)
+- [Development](docs/development.md)
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE) for details.
+[GPL-3.0](LICENSE)

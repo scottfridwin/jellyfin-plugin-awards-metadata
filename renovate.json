@@ -1,12 +1,52 @@
 {
-    "extends": [
-        "config:recommended"
-    ],
-    "prCreation": "immediate",
-    "nuget": {
-        "enabled": true
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "prCreation": "immediate",
+  "automerge": true,
+  "automergeType": "pr",
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "osvVulnerabilityAlerts": true,
+  "nuget": {
+    "enabled": true
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep plugin targetAbi in step with the Jellyfin packages",
+      "managerFilePatterns": [
+        "/(^|/)build\\.yaml$/"
+      ],
+      "matchStrings": [
+        "targetAbi:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\.0\""
+      ],
+      "depNameTemplate": "Jellyfin.Controller",
+      "datasourceTemplate": "nuget",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Jellyfin.* must move together (NU1605); targetAbi follows via the regex manager",
+      "matchPackageNames": [
+        "Jellyfin.Controller",
+        "Jellyfin.Model",
+        "Jellyfin.Data"
+      ],
+      "groupName": "Jellyfin packages"
     },
-    "assignees": [
-        "scottfridwin"
-    ]
+    {
+      "description": "Jellyfin 12.x targets net10.0; stay on the .NET 10 SDK",
+      "matchDepNames": [
+        "mcr.microsoft.com/dotnet/sdk",
+        "dotnet-sdk"
+      ],
+      "allowedVersions": "/^10\\./"
+    }
+  ],
+  "assignees": [
+    "scottfridwin"
+  ]
 }
