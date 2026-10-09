@@ -42,7 +42,7 @@ public sealed partial class TmdbAwardsIndexParser : IAwardsIndexParser
         foreach (var link in links)
         {
             var href = link.GetAttributeValue("href", string.Empty);
-            var name = link.InnerText?.Trim() ?? string.Empty;
+            var name = HtmlEntity.DeEntitize(link.InnerText ?? string.Empty).Trim();
 
             if (string.IsNullOrEmpty(href) || string.IsNullOrEmpty(name))
             {

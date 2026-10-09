@@ -123,4 +123,17 @@ public class AwardsIndexParserTests
         var years = ceremonies.Select(c => c.Year).ToList();
         Assert.Equal(years.OrderBy(y => y), years);
     }
+
+    [Theory]
+    [InlineData("/award/66-critics-choice-television-awards", "Critics&#39; Choice Television Awards", "Critics' Choice Television Awards")]
+    [InlineData("/award/74-bmi-film-tv-visual-media-awards", "BMI Film, TV &amp; Visual Media Awards", "BMI Film, TV & Visual Media Awards")]
+    [InlineData("/award/76-sxsw-film-tv-awards", "&nbsp;SXSW Film &amp; TV Awards ", "SXSW Film & TV Awards")]
+    public void ParseIndex_DecodesHtmlEntitiesInNames(string href, string encodedName, string expectedName)
+    {
+        var html = $"<html><body><a href=\"{href}\">{encodedName}</a></body></html>";
+
+        var organization = Assert.Single(_parser.ParseIndex(html));
+
+        Assert.Equal(expectedName, organization.Name);
+    }
 }
