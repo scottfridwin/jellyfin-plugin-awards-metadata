@@ -4,14 +4,12 @@ on:
   push:
     branches:
       - main
-      - dev
     paths-ignore:
       - "**/*.md"
+  # No paths-ignore: "Test" is a required check and must report on every PR
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "**/*.md"
   workflow_dispatch:
     inputs:
       release_tag:
@@ -20,8 +18,11 @@ on:
         type: string
 
 env:
-  DOTNET_VERSION: "9.0.x"
+  DOTNET_VERSION: "10.0.x"
   PLUGIN_NAME: "Jellyfin.Plugin.AwardsMetadata"
+
+permissions:
+  contents: read
 
 jobs:
   # ----------------------------------------------------------
@@ -33,10 +34,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Verify targetAbi matches Jellyfin packages
+        run: |
+          # A targetAbi older than the compiled-against packages would let older servers load the plugin
+          ABI=$(grep 'targetAbi:' build.yaml | sed 's/.*"\(.*\)"/\1/')
+          FAIL=0
+          for PKG in Jellyfin.Controller Jellyfin.Model; do
+            VER=$(grep -oP "Include=\"${PKG}\" Version=\"\K[^\"]+" "${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.csproj")
+            echo "${PKG}=${VER} targetAbi=${ABI}"
+            if [[ "${VER}.0" != "${ABI}" ]]; then
+              echo "::error file=build.yaml::targetAbi ${ABI} does not match ${PKG} ${VER}"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -50,33 +66,22 @@ jobs:
         run: dotnet test --no-build --configuration Release --verbosity normal
 
   # ----------------------------------------------------------
-  # Build: Publish plugin artifact + dev manifest (on push to main)
+  # Build: Publish the plugin as a workflow artifact (also on PRs)
   # ----------------------------------------------------------
   build:
     name: Build Plugin
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag == '')
-    permissions:
-      contents: write
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.release_tag == ''
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Determine version
-        id: version
-        run: |
-          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          # Dev builds: use run number for unique incrementing version (revision max 65535)
-          VERSION="0.0.0.${{ github.run_number }}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build plugin
         run: |
@@ -84,76 +89,61 @@ jobs:
             "${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.csproj" \
             --configuration=Release \
             --output=artifacts \
-            -p:Version=${{ steps.version.outputs.version }}
-
-      - name: Create plugin zip
-        run: |
-          cd artifacts
-          zip -r "../${{ env.PLUGIN_NAME }}-dev-${{ steps.version.outputs.short_sha }}.zip" .
+            -p:Version=0.0.0.${{ github.run_number }}
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: ${{ env.PLUGIN_NAME }}-${{ steps.version.outputs.short_sha }}
+          name: ${{ env.PLUGIN_NAME }}-${{ github.sha }}
           path: artifacts/
           if-no-files-found: error
 
-      - name: Publish dev manifest to GitHub Pages
-        if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+  # ----------------------------------------------------------
+  # Release check: auto-release Renovate merges that change the shipped plugin
+  # ----------------------------------------------------------
+  release-check:
+    name: Release check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      - name: Decide
+        id: check
         run: |
-          PLUGIN_NAME="${{ env.PLUGIN_NAME }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          SHORT_SHA="${{ steps.version.outputs.short_sha }}"
-          ZIP_NAME="${PLUGIN_NAME}-dev-${SHORT_SHA}.zip"
-          CHECKSUM="$(md5sum "${ZIP_NAME}" | awk '{print $1}')"
-          TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          SOURCE_URL="https://${{ github.repository_owner }}.github.io/jellyfin-plugin-awards-metadata/dev/${ZIP_NAME}"
-
-          jq -n \
-            --arg version "${VERSION}" \
-            --arg sourceUrl "$SOURCE_URL" \
-            --arg checksum "$CHECKSUM" \
-            --arg timestamp "$TIMESTAMP" \
-            '[{
-              category: "Metadata",
-              description: "Adds custom award metadata tags to media items in Jellyfin.",
-              guid: "38895a18-37d8-4a0a-92f8-c38335820627",
-              name: "Awards Metadata (Dev)",
-              overview: "Apply custom award metadata tags (development build)",
-              owner: "scottfridwin",
-              versions: [{
-                version: $version,
-                targetAbi: "10.11.0.0",
-                sourceUrl: $sourceUrl,
-                checksum: $checksum,
-                timestamp: $timestamp,
-                changelog: ("Dev build " + $version)
-              }]
-            }]' > dev-manifest.json
-
-          # Deploy to gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git stash --include-untracked
-          git fetch origin gh-pages:gh-pages 2>/dev/null && git checkout gh-pages || { git checkout --orphan gh-pages; git rm -rf . 2>/dev/null || true; }
-
-          mkdir -p dev
-          git stash pop 2>/dev/null || true
-          cp "${ZIP_NAME}" dev/ 2>/dev/null || cp "../${ZIP_NAME}" dev/ 2>/dev/null || true
-          cp dev-manifest.json dev/manifest.json 2>/dev/null || true
-
-          git add dev/
-          git commit -m "Update dev manifest (${SHORT_SHA})" --allow-empty
-          git push origin gh-pages
+          AUTHOR="$(git log -1 --format=%an)"
+          CHANGED="$(git diff --name-only HEAD~1 HEAD)"
+          echo "Author: ${AUTHOR}"
+          echo "Changed files:"; echo "${CHANGED}"
+          # Only plugin sources and the plugin manifest affect the shipped zip
+          if [[ "$AUTHOR" == "renovate[bot]" ]] && grep -qE '^(Jellyfin\.Plugin\.AwardsMetadata(\.Scraper)?/|build\.yaml$|Directory\.Build\.props$)' <<< "$CHANGED"; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ----------------------------------------------------------
   # Release: Create GitHub Release + update stable manifest on gh-pages
   # ----------------------------------------------------------
   release:
-    name: Release ${{ github.event.inputs.release_tag }}
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
-    needs: test
+    name: Release
+    if: >-
+      !cancelled() && needs.test.result == 'success' && (
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '') ||
+        needs.release-check.outputs.release == 'true'
+      )
+    needs: [test, release-check]
     runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
 
@@ -166,19 +156,30 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Determine version
         id: version
+        env:
+          VERSION_TAG: ${{ github.event.inputs.release_tag }}
         run: |
-          VERSION_TAG="${{ github.event.inputs.release_tag }}"
+          if [[ -z "$VERSION_TAG" ]]; then
+            # Auto release: bump the patch part of the latest vA.B.C tag
+            LATEST=$(git tag --list 'v[0-9]*' --sort=-version:refname | head -1)
+            IFS=. read -r MAJ MIN PAT _ <<< "${LATEST#v}"
+            VERSION_TAG="v${MAJ}.${MIN}.$((PAT + 1))"
+            echo "Auto release: ${LATEST} -> ${VERSION_TAG}"
+          elif [[ ! "$VERSION_TAG" =~ ^v[0-9]+(\.[0-9]+){2,3}$ ]]; then
+            echo "::error::release_tag must look like v1.2.3 or v1.2.3.4 (got ${VERSION_TAG})"
+            exit 1
+          fi
           VERSION="${VERSION_TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${VERSION_TAG}" >> "$GITHUB_OUTPUT"
@@ -192,6 +193,27 @@ jobs:
             --configuration=Release \
             --output=artifacts \
             -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Write meta.json
+        run: |
+          # Jellyfin refuses to load a plugin whose meta.json targetAbi is newer than the server, even for manual zip installs
+          jq -n \
+            --arg version "${{ steps.version.outputs.version }}" \
+            --arg targetAbi "${{ steps.version.outputs.target_abi }}" \
+            --arg timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            '{
+              category: "Metadata",
+              changelog: ("Release " + $version),
+              description: "Adds custom award metadata tags to media items in Jellyfin.",
+              guid: "38895a18-37d8-4a0a-92f8-c38335820627",
+              name: "Awards Metadata",
+              overview: "Apply custom award metadata tags",
+              owner: "scottfridwin",
+              targetAbi: $targetAbi,
+              timestamp: $timestamp,
+              version: $version
+            }' > artifacts/meta.json
+          cat artifacts/meta.json
 
       - name: Create plugin zip
         run: |
@@ -226,7 +248,7 @@ jobs:
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           body_path: /tmp/release-notes.md
@@ -296,3 +318,32 @@ jobs:
           git add manifest.json
           git commit -m "Update stable manifest for ${TAG}" --allow-empty
           git push origin gh-pages
+
+  # ----------------------------------------------------------
+  # Notify: bot-triggered runs on main email nobody, so open an issue
+  # ----------------------------------------------------------
+  notify-failure:
+    name: Notify failure
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, build, release-check, release]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Open or update CI failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          TITLE="CI failed on main"
+          BODY="Run: ${RUN_URL}
+          Commit: ${GITHUB_SHA::7} $(head -1 <<< "$COMMIT_MSG")"
+          EXISTING=$(gh issue list --state open --search "in:title \"${TITLE}\"" --json number --jq '.[0].number')
+          if [[ -n "$EXISTING" ]]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --assignee "${{ github.repository_owner }}"
+          fi
