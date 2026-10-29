@@ -30,6 +30,14 @@
         "checksum": "9b59b21a8e99a1d365fa7525283e6f51",
         "timestamp": "2026-10-26T01:21:37Z",
         "changelog": "Release 1.1.4"
+      },
+      {
+        "version": "1.1.5",
+        "targetAbi": "12.4.0.0",
+        "sourceUrl": "https://github.com/scottfridwin/jellyfin-plugin-awards-metadata/releases/download/v1.1.5/Jellyfin.Plugin.AwardsMetadata-1.1.5.zip",
+        "checksum": "4e6583e09eb4ddcfc20fe27fc2487362",
+        "timestamp": "2026-10-29T21:56:07Z",
+        "changelog": "Release 1.1.5"
       }
     ]
   }
